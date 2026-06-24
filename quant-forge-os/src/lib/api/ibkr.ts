@@ -1,4 +1,4 @@
-const BASE = import.meta.env.DEV ? "/ibkr" : "https://backend.nassphx.com:8001/v1/api";
+const BASE = import.meta.env.DEV ? "/ibkr" : "https://backend.nassphx.com/v1/api";
 let CURRENT_ACCOUNT = import.meta.env.VITE_IBKR_ACCOUNT_ID ?? "U25901412";
 
 export function setIBKRAccount(id: string) {
