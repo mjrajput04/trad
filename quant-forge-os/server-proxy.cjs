@@ -75,6 +75,11 @@ const ibkrProxy = createProxyMiddleware({
         return cookie.replace(/Domain=localhost/gi, `Domain=${req.headers.host}`);
       });
     }
+
+    // Rewrite absolute gateway redirects to relative so the login flow works behind the proxy
+    if (proxyRes.headers['location']) {
+      proxyRes.headers['location'] = proxyRes.headers['location'].replace(/^https?:\/\/localhost:7175/i, '');
+    }
   },
   
   onError: (err, req, res) => {
@@ -83,14 +88,15 @@ const ibkrProxy = createProxyMiddleware({
   }
 });
 
-// Routes
-app.use('/v1/api', ibkrProxy);
-app.use('/sso', ibkrProxy);
-
-// Health check
+// Health check (define before the catch-all proxy below)
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
+
+// Proxy everything else to the IBKR Gateway. This serves the gateway login UI
+// at https://backend.nassphx.com/ as well as all API paths (/v1/api, /sso,
+// static assets) through the same CORS-enabled proxy.
+app.use('/', ibkrProxy);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 IBKR Proxy Server running on port ${PORT}`);
