@@ -1,15 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard,
   Eye,
   Radar,
   Wallet,
   Layers,
   ListOrdered,
-  Newspaper,
   BellRing,
-  BookOpen,
-  Sparkles,
   Plug,
   Settings,
   TrendingUp,
@@ -17,19 +13,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/alerts", label: "Alerts", icon: BellRing },
   { to: "/watchlist", label: "Watchlist", icon: Eye },
   { to: "/scanner", label: "Scanner", icon: Radar },
   { to: "/portfolio", label: "Portfolio", icon: Wallet },
   { to: "/positions", label: "Positions", icon: Layers },
   { to: "/orders", label: "Orders", icon: ListOrdered },
-  { to: "/news", label: "News", icon: Newspaper },
-  { to: "/alerts", label: "Alerts", icon: BellRing },
-  { to: "/journal", label: "Journal", icon: BookOpen },
-] as const;
-
-const AI = [
-  { to: "/copilot", label: "AI Copilot", icon: Sparkles },
 ] as const;
 
 const SYS = [
@@ -78,10 +67,6 @@ export function AppSidebar() {
         <div className="space-y-1">
           <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Trading</div>
           {NAV.map((n) => <Item key={n.to} {...n} />)}
-        </div>
-        <div className="space-y-1">
-          <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Intelligence</div>
-          {AI.map((n) => <Item key={n.to} {...n} />)}
         </div>
         <div className="space-y-1">
           <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">System</div>

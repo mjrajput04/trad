@@ -18,9 +18,6 @@ import { Route as AppScannerRouteImport } from './routes/_app.scanner'
 import { Route as AppPositionsRouteImport } from './routes/_app.positions'
 import { Route as AppPortfolioRouteImport } from './routes/_app.portfolio'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
-import { Route as AppNewsRouteImport } from './routes/_app.news'
-import { Route as AppJournalRouteImport } from './routes/_app.journal'
-import { Route as AppCopilotRouteImport } from './routes/_app.copilot'
 import { Route as AppBrokerRouteImport } from './routes/_app.broker'
 import { Route as AppAlertsRouteImport } from './routes/_app.alerts'
 import { Route as AppStockSymbolRouteImport } from './routes/_app.stock.$symbol'
@@ -69,21 +66,6 @@ const AppOrdersRoute = AppOrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => AppRoute,
 } as any)
-const AppNewsRoute = AppNewsRouteImport.update({
-  id: '/news',
-  path: '/news',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppJournalRoute = AppJournalRouteImport.update({
-  id: '/journal',
-  path: '/journal',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCopilotRoute = AppCopilotRouteImport.update({
-  id: '/copilot',
-  path: '/copilot',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppBrokerRoute = AppBrokerRouteImport.update({
   id: '/broker',
   path: '/broker',
@@ -105,9 +87,6 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/alerts': typeof AppAlertsRoute
   '/broker': typeof AppBrokerRoute
-  '/copilot': typeof AppCopilotRoute
-  '/journal': typeof AppJournalRoute
-  '/news': typeof AppNewsRoute
   '/orders': typeof AppOrdersRoute
   '/portfolio': typeof AppPortfolioRoute
   '/positions': typeof AppPositionsRoute
@@ -120,9 +99,6 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/alerts': typeof AppAlertsRoute
   '/broker': typeof AppBrokerRoute
-  '/copilot': typeof AppCopilotRoute
-  '/journal': typeof AppJournalRoute
-  '/news': typeof AppNewsRoute
   '/orders': typeof AppOrdersRoute
   '/portfolio': typeof AppPortfolioRoute
   '/positions': typeof AppPositionsRoute
@@ -138,9 +114,6 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/broker': typeof AppBrokerRoute
-  '/_app/copilot': typeof AppCopilotRoute
-  '/_app/journal': typeof AppJournalRoute
-  '/_app/news': typeof AppNewsRoute
   '/_app/orders': typeof AppOrdersRoute
   '/_app/portfolio': typeof AppPortfolioRoute
   '/_app/positions': typeof AppPositionsRoute
@@ -157,9 +130,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/alerts'
     | '/broker'
-    | '/copilot'
-    | '/journal'
-    | '/news'
     | '/orders'
     | '/portfolio'
     | '/positions'
@@ -172,9 +142,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/alerts'
     | '/broker'
-    | '/copilot'
-    | '/journal'
-    | '/news'
     | '/orders'
     | '/portfolio'
     | '/positions'
@@ -189,9 +156,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_app/alerts'
     | '/_app/broker'
-    | '/_app/copilot'
-    | '/_app/journal'
-    | '/_app/news'
     | '/_app/orders'
     | '/_app/portfolio'
     | '/_app/positions'
@@ -272,27 +236,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrdersRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/news': {
-      id: '/_app/news'
-      path: '/news'
-      fullPath: '/news'
-      preLoaderRoute: typeof AppNewsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/journal': {
-      id: '/_app/journal'
-      path: '/journal'
-      fullPath: '/journal'
-      preLoaderRoute: typeof AppJournalRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/copilot': {
-      id: '/_app/copilot'
-      path: '/copilot'
-      fullPath: '/copilot'
-      preLoaderRoute: typeof AppCopilotRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/broker': {
       id: '/_app/broker'
       path: '/broker'
@@ -320,9 +263,6 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAlertsRoute: typeof AppAlertsRoute
   AppBrokerRoute: typeof AppBrokerRoute
-  AppCopilotRoute: typeof AppCopilotRoute
-  AppJournalRoute: typeof AppJournalRoute
-  AppNewsRoute: typeof AppNewsRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
   AppPositionsRoute: typeof AppPositionsRoute
@@ -336,9 +276,6 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAlertsRoute: AppAlertsRoute,
   AppBrokerRoute: AppBrokerRoute,
-  AppCopilotRoute: AppCopilotRoute,
-  AppJournalRoute: AppJournalRoute,
-  AppNewsRoute: AppNewsRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppPortfolioRoute: AppPortfolioRoute,
   AppPositionsRoute: AppPositionsRoute,

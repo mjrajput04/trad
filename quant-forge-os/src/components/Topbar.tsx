@@ -1,4 +1,4 @@
-import { Sparkles, Plug2, LogOut, ShieldCheck } from "lucide-react";
+import { Plug2, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -87,12 +87,6 @@ export function Topbar() {
           <Plug2 className="h-3.5 w-3.5" />
           <span>{ibkrOk ? 'IBKR Connected' : 'IBKR Login'}</span>
           <LiveDot />
-        </button>
-        <button
-          onClick={() => navigate({ to: "/copilot" })}
-          className="inline-flex items-center gap-2 rounded-lg gradient-primary text-background px-3 h-9 text-xs font-semibold glow-primary">
-          <Sparkles className="h-3.5 w-3.5" />
-          AI Copilot
         </button>
 
         <DropdownMenu>
