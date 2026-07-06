@@ -56,6 +56,11 @@ function Alerts() {
   const indices = (quotesData?.quotes ?? []).filter((q) => INDEX_SYMS.includes(q.symbol));
   const stocks = (quotesData?.quotes ?? []).filter((q) => !INDEX_SYMS.includes(q.symbol));
 
+  // Defensive locals — never assume the engine returned every field/array.
+  const alerts = data?.alerts ?? [];
+  const closed = data?.closed ?? [];
+  const bestTrade = data?.bestTrade ?? null;
+
   return (
     <div className="p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -91,21 +96,21 @@ function Alerts() {
       ) : (
         <>
           {/* ---- Best Trade ---- */}
-          {data?.bestTrade && <BestTrade a={data.bestTrade} now={nowPrice(data.bestTrade.symbol)} />}
+          {bestTrade && <BestTrade a={bestTrade} now={nowPrice(bestTrade.symbol)} />}
 
           {/* ---- Buy Alerts ---- */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold">Buy Alerts</h2>
-              <span className="text-[11px] text-muted-foreground">{data?.alerts.length ?? 0} active · min score {data?.minScore}</span>
+              <span className="text-[11px] text-muted-foreground">{alerts.length} active · min score {data?.minScore ?? "—"}</span>
             </div>
-            {(data?.alerts.length ?? 0) === 0 ? (
+            {alerts.length === 0 ? (
               <div className="rounded-2xl glass p-8 text-center text-muted-foreground text-sm">
                 No setups meet the strict standard right now. Quality over quantity — check back soon.
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {data!.alerts.map((a) => (
+                {alerts.map((a) => (
                   <AlertCard key={a.id} a={a} now={nowPrice(a.symbol)} />
                 ))}
               </div>
@@ -179,7 +184,7 @@ function BestTrade({ a, now }: { a: TsAlert; now?: number }) {
             {now != null && <span className="text-sm num text-muted-foreground">Now {money(now)}</span>}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {a.reasons.slice(0, 4).map((r, i) => (
+            {(a.reasons ?? []).slice(0, 4).map((r, i) => (
               <span key={i} className="text-[11px] rounded-md bg-surface-2 px-2 py-0.5 text-muted-foreground">{r}</span>
             ))}
           </div>
