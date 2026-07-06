@@ -1,6 +1,6 @@
 -- ============================================================
 -- QUANT FORGE - Full Trading App Schema
--- Run this in: https://supabase.com/dashboard/project/eujwbegzqyotdtiazixf/sql/new
+-- Run this in: https://supabase.com/dashboard/project/vdurrhxaffcszjfawfie/sql/new
 -- ============================================================
 
 
