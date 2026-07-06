@@ -65,8 +65,17 @@ async function initBrokerage() {
         // /iserver/accounts a few times (tickle in between) until it succeeds.
         if (!r.ok && !reauthTried) {
           reauthTried = true;
+          // "no bridge" means the brokerage session was never INITIALIZED
+          // (only the SSO + portfolio session exist). ssodh/init with
+          // compete:true creates/takes-over the brokerage session; then
+          // reauthenticate + tickle bring the market-data bridge up. Poll
+          // /iserver/accounts until it succeeds (session comes up async).
+          await rawFetch("/iserver/auth/ssodh/init", {
+            method: "POST",
+            body: JSON.stringify({ publish: true, compete: true }),
+          }).catch(() => {});
           await rawFetch("/iserver/reauthenticate", { method: "POST" }).catch(() => {});
-          for (let i = 0; i < 4 && !r.ok; i++) {
+          for (let i = 0; i < 6 && !r.ok; i++) {
             await new Promise((res) => setTimeout(res, 2000));
             await rawFetch("/tickle", { method: "POST" }).catch(() => {});
             r = await rawFetch("/iserver/accounts");
