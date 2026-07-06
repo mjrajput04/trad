@@ -6,6 +6,7 @@ import { useState } from "react";
 import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
+import { SymbolPicker } from "@/components/SymbolPicker";
 import { toast } from "sonner";
 
 type BrokerSearch = {
@@ -219,7 +220,7 @@ function Broker() {
 
         <div className="space-y-3">
           <Row label="Symbol">
-            <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm font-semibold focus:outline-none" />
+            <SymbolPicker value={symbol} onChange={setSymbol} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm font-semibold focus:outline-none" />
           </Row>
           <div className="grid grid-cols-2 gap-3">
             <Row label="Quantity">
