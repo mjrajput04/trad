@@ -8,21 +8,47 @@ import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
 
+type BrokerSearch = {
+  symbol?: string;
+  side?: "BUY" | "SELL";
+  type?: "MKT" | "LMT" | "STP";
+  price?: number;
+  stop?: number;
+  tp?: number;
+  qty?: number;
+};
+
 export const Route = createFileRoute("/_app/broker")({
   head: () => ({ meta: [{ title: "Broker · IBKR · NOVA" }] }),
+  // Lets other pages (e.g. an alert's "Trade this") pre-fill the ticket.
+  validateSearch: (s: Record<string, unknown>): BrokerSearch => {
+    const num = (v: unknown) => (v == null || v === "" ? undefined : Number(v));
+    return {
+      symbol: typeof s.symbol === "string" ? s.symbol : undefined,
+      side: s.side === "SELL" ? "SELL" : s.side === "BUY" ? "BUY" : undefined,
+      type: s.type === "MKT" || s.type === "LMT" || s.type === "STP" ? s.type : undefined,
+      price: num(s.price),
+      stop: num(s.stop),
+      tp: num(s.tp),
+      qty: num(s.qty),
+    };
+  },
   component: Broker,
 });
 
 function Broker() {
   const qc = useQueryClient();
+  const search = Route.useSearch();
   const { isPaper, setIsPaper, paperConfigured, currentAccount } = useTrading();
-  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
-  const [type, setType] = useState("LMT");
-  const [symbol, setSymbol] = useState("AAPL");
-  const [qty, setQty] = useState(100);
-  const [price, setPrice] = useState(0);
-  const [stop, setStop] = useState(0);
-  const [tp, setTp] = useState(0);
+  // Seed from search params when arriving via an alert's "Trade this" link.
+  const [side, setSide] = useState<"BUY" | "SELL">(search.side ?? "BUY");
+  const [type, setType] = useState<string>(search.type ?? "LMT");
+  const [symbol, setSymbol] = useState((search.symbol ?? "AAPL").toUpperCase());
+  const [qty, setQty] = useState(search.qty && search.qty > 0 ? search.qty : 100);
+  const [price, setPrice] = useState(search.price ?? 0);
+  const [stop, setStop] = useState(search.stop ?? 0);
+  const [tp, setTp] = useState(search.tp ?? 0);
+  const fromAlert = !!search.symbol && (search.price ?? 0) > 0;
 
   const { data: auth } = useQuery({
     queryKey: ["ibkr-auth"],
@@ -178,6 +204,13 @@ function Broker() {
             <div className="text-[11px] text-muted-foreground">{isPaper ? "Paper" : "Live"} · Smart Routing</div>
           </div>
         </div>
+
+        {fromAlert && (
+          <div className="mb-3 rounded-lg bg-info/10 border border-info/20 px-3 py-2 text-[11px] text-info flex items-center gap-2">
+            <Zap className="h-3.5 w-3.5 shrink-0" />
+            <span>Pre-filled from a TradeScope alert — review the levels, then confirm to send to IBKR.</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2 mb-3">
           <button onClick={() => setSide("BUY")} className={`h-10 rounded-lg text-sm font-bold transition ${side === "BUY" ? "bg-bull text-background glow-bull" : "hairline bg-surface-1 text-muted-foreground"}`}>BUY</button>

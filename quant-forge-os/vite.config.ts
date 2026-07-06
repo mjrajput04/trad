@@ -10,6 +10,9 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // (https://backend.nassphx.com). Port 7175 is the gateway's local port on the
 // VPS and is NOT exposed publicly.
 const GATEWAY = process.env.VITE_IBKR_GATEWAY_URL ?? "https://backend.nassphx.com";
+// TradeScope alerts engine is proxied by nginx at nassphx.com/ts-api → :3100.
+// In dev we forward /ts-api to the live site so the alerts dashboard works locally.
+const TS_ENGINE = process.env.VITE_TS_ENGINE_URL ?? "https://nassphx.com";
 
 export default defineConfig({
   nitro: { preset: "node-server" },
@@ -33,6 +36,11 @@ export default defineConfig({
           secure: false,
           cookieDomainRewrite: { "*": "localhost" },
           cookiePathRewrite: { "*": "/" },
+        },
+        "/ts-api": {
+          target: TS_ENGINE,
+          changeOrigin: true,
+          secure: false,
         },
       },
     },
