@@ -202,12 +202,13 @@ function BestTrade({ a, now }: { a: TsAlert; now?: number }) {
             </div>
           )}
         </div>
-        <div className="flex flex-col items-stretch gap-3 w-full sm:w-auto">
+        <div className="flex flex-col items-stretch gap-3 w-full sm:w-auto sm:min-w-[280px]">
           <div className="flex gap-2">
             <Level label="Entry" value={a.entry} tone="info" />
             <Level label="Target" value={a.target} sub={pct(a.targetPct)} tone="bull" />
             <Level label="Stop" value={a.stop} sub={pct(a.stopPct)} tone="bear" />
           </div>
+          <LevelBar entry={a.entry} target={a.target} stop={a.stop} now={now} />
           <Link to="/broker" search={tradeSearch(a)}
             className="h-10 rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-2 hover:opacity-90 transition">
             <ArrowUpRight className="h-4 w-4" /> Trade this
@@ -234,6 +235,8 @@ function AlertCard({ a, now }: { a: TsAlert; now?: number }) {
         <Level label="Target" value={a.target} sub={pct(a.targetPct)} tone="bull" />
         <Level label="Stop" value={a.stop} sub={pct(a.stopPct)} tone="bear" />
       </div>
+
+      <LevelBar entry={a.entry} target={a.target} stop={a.stop} now={now} />
 
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>R/R {a.riskReward?.toFixed(1)} · RSI {Math.round(a.rsi)} · Vol {a.relVol?.toFixed(1)}x</span>
@@ -270,6 +273,48 @@ function Level({ label, value, sub, tone }: { label: string; value: number; sub?
       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`text-sm font-bold num ${color}`}>{money(value)}</div>
       {sub && <div className={`text-[10px] num ${color}`}>{sub}</div>}
+    </div>
+  );
+}
+
+// Live position of the current price between Stop (left/red) and Target
+// (right/green), with Entry marked. The dot animates as the price ticks, so you
+// can see at a glance whether it's heading to target (profit) or stop (loss).
+function LevelBar({ entry, target, stop, now }: { entry: number; target: number; stop: number; now?: number }) {
+  const lo = Math.min(stop, target);
+  const hi = Math.max(stop, target);
+  const span = hi - lo || 1;
+  const clamp = (p: number) => Math.max(0, Math.min(100, p));
+  const pos = (v: number) => clamp(((v - lo) / span) * 100);
+  const entryPos = pos(entry);
+  const nowPos = now != null ? pos(now) : null;
+  const inProfit = now != null && now >= entry;
+  const toTarget = target !== entry ? (((now ?? entry) - entry) / (target - entry)) * 100 : 0;
+  const toStop = entry !== stop ? ((entry - (now ?? entry)) / (entry - stop)) * 100 : 0;
+  return (
+    <div>
+      <div className="relative h-2 rounded-full bg-surface-2">
+        <div className="absolute inset-y-0 left-0 rounded-l-full bg-bear/30" style={{ width: `${entryPos}%` }} />
+        <div className="absolute inset-y-0 rounded-r-full bg-bull/30" style={{ left: `${entryPos}%`, right: 0 }} />
+        <div className="absolute top-1/2 h-3 w-[2px] -translate-y-1/2 bg-info" style={{ left: `${entryPos}%` }} />
+        {nowPos != null && (
+          <div
+            className={`absolute top-1/2 h-3.5 w-3.5 rounded-full border-2 border-background shadow ${inProfit ? "bg-bull" : "bg-bear"} transition-all duration-700`}
+            style={{ left: `${nowPos}%`, transform: "translate(-50%, -50%)" }}
+          />
+        )}
+      </div>
+      <div className="flex items-center justify-between text-[9px] mt-1">
+        <span className="text-bear">Stop</span>
+        {now != null && (
+          <span className={`font-semibold ${inProfit ? "text-bull" : "text-bear"}`}>
+            {inProfit
+              ? `▲ ${clamp(toTarget).toFixed(0)}% to target`
+              : `▼ ${clamp(toStop).toFixed(0)}% to stop`}
+          </span>
+        )}
+        <span className="text-bull">Target</span>
+      </div>
     </div>
   );
 }
