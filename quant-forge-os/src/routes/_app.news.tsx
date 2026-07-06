@@ -19,8 +19,8 @@ function News() {
   return (
     <div className="p-6 space-y-5">
       <div>
-        <h1 className="text-xl font-semibold">AI News Intelligence</h1>
-        <p className="text-sm text-muted-foreground">Realtime scoring across 4,300+ sources — bull, bear, impact, confidence.</p>
+        <h1 className="text-xl font-semibold">News <span className="align-middle ml-2 rounded bg-warn/15 text-warn text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wider">Preview</span></h1>
+        <p className="text-sm text-muted-foreground">Live news feed is not connected yet — the headlines below are sample data.</p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
@@ -47,7 +47,7 @@ function News() {
                 <Score label="Bull" value={n.bull} color="var(--bull)" icon={TrendingUp} />
                 <Score label="Bear" value={n.bear} color="var(--bear)" icon={TrendingDown} />
                 <Score label="Impact" value={n.impact} color="var(--info)" />
-                <Score label="AI Conf." value={Math.floor(80 + Math.random() * 15)} color="var(--violet)" icon={Brain} />
+                <Score label="AI Conf." value={Math.max(n.bull, n.bear)} color="var(--violet)" icon={Brain} />
               </div>
 
               <div className="mt-3 h-1 rounded-full bg-surface-2 overflow-hidden">

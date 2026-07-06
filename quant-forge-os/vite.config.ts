@@ -6,6 +6,11 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// The IBKR gateway is only reachable through the VPS proxy on port 443
+// (https://backend.nassphx.com). Port 7175 is the gateway's local port on the
+// VPS and is NOT exposed publicly.
+const GATEWAY = process.env.VITE_IBKR_GATEWAY_URL ?? "https://backend.nassphx.com";
+
 export default defineConfig({
   nitro: { preset: "node-server" },
   tanstackStart: {
@@ -15,33 +20,19 @@ export default defineConfig({
     server: {
       proxy: {
         "/ibkr": {
-          target: "https://backend.nassphx.com:7175",
+          target: GATEWAY,
           changeOrigin: true,
           secure: false,
-          cookieDomainRewrite: { 
-            "backend.nassphx.com": "localhost",
-            ".backend.nassphx.com": "localhost"
-          },
+          cookieDomainRewrite: { "*": "localhost" },
           cookiePathRewrite: { "*": "/" },
-          headers: { 
-            "origin": "https://backend.nassphx.com:7175",
-            "referer": "https://backend.nassphx.com:7175/"
-          },
           rewrite: (path) => path.replace(/^\/ibkr/, "/v1/api"),
         },
         "/sso": {
-          target: "https://backend.nassphx.com:7175",
+          target: GATEWAY,
           changeOrigin: true,
           secure: false,
-          cookieDomainRewrite: { 
-            "backend.nassphx.com": "localhost",
-            ".backend.nassphx.com": "localhost"
-          },
+          cookieDomainRewrite: { "*": "localhost" },
           cookiePathRewrite: { "*": "/" },
-          headers: { 
-            "origin": "https://backend.nassphx.com:7175",
-            "referer": "https://backend.nassphx.com:7175/"
-          },
         },
       },
     },

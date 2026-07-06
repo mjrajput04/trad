@@ -67,8 +67,8 @@ function Orders() {
             <div className="col-span-1">Status</div>
             <div className="col-span-1 text-right">Action</div>
           </div>
-          {orders.map((o, i) => (
-            <div key={i} className="grid grid-cols-12 items-center px-4 py-3 hairline-b last:border-0 hover:bg-surface-2 transition">
+          {orders.map((o) => (
+            <div key={o.orderId} className="grid grid-cols-12 items-center px-4 py-3 hairline-b last:border-0 hover:bg-surface-2 transition">
               <div className="col-span-1 text-xs text-muted-foreground num">{o.time}</div>
               <div className="col-span-2 text-sm font-semibold">{o.symbol}</div>
               <div className="col-span-1">
@@ -76,8 +76,8 @@ function Orders() {
               </div>
               <div className="col-span-1 text-xs text-muted-foreground">{o.type}</div>
               <div className="col-span-1 text-right num text-sm">{o.quantity}</div>
-              <div className="col-span-2 text-right num text-sm">${fmtMoney(o.price ?? 0)}</div>
-              <div className="col-span-2 text-right num text-sm text-muted-foreground">${fmtMoney((o.price ?? 0) * o.quantity)}</div>
+              <div className="col-span-2 text-right num text-sm">{o.price > 0 ? `$${fmtMoney(o.price)}` : "MKT"}</div>
+              <div className="col-span-2 text-right num text-sm text-muted-foreground">{o.price > 0 ? `$${fmtMoney(o.price * o.quantity)}` : "—"}</div>
               <div className="col-span-1">
                 <span className="inline-flex items-center gap-1 text-[11px]">
                   {tab === "Working" && <><Clock className="h-3 w-3 text-warn" /><span className="text-warn">Working</span></>}
@@ -88,7 +88,13 @@ function Orders() {
               </div>
               <div className="col-span-1 flex justify-end">
                 {tab === "Working" && (
-                  <button onClick={() => cancel.mutate(String(o.orderId))} disabled={cancel.isPending}
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Cancel ${o.side} ${o.quantity} ${o.symbol} (order #${o.orderId})?`)) {
+                        cancel.mutate(String(o.orderId));
+                      }
+                    }}
+                    disabled={cancel.isPending}
                     className="text-[11px] text-bear hover:underline disabled:opacity-50">Cancel</button>
                 )}
               </div>

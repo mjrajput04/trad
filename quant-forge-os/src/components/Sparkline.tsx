@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 type Props = {
   data: number[];
   positive?: boolean;
@@ -8,7 +10,8 @@ type Props = {
 };
 
 export function Sparkline({ data, positive = true, width = 120, height = 36, strokeWidth = 1.5, fill = true }: Props) {
-  if (!data?.length) return null;
+  const id = useId();
+  if (!data?.length || data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
@@ -17,7 +20,6 @@ export function Sparkline({ data, positive = true, width = 120, height = 36, str
   const d = `M ${pts.join(" L ")}`;
   const area = `${d} L ${width},${height} L 0,${height} Z`;
   const color = positive ? "var(--bull)" : "var(--bear)";
-  const id = `sg-${Math.random().toString(36).slice(2, 9)}`;
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
       <defs>

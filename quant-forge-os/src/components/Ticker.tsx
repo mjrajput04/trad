@@ -1,31 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { getMarketSnapshot, CONIDS } from "@/lib/api/ibkr";
+import { getQuotes } from "@/lib/api/ibkr";
+import { UNIVERSE_SYMBOLS } from "@/lib/symbols";
 import { fmtMoney } from "@/lib/market-data";
-
-const TICKER_SYMBOLS = Object.entries(CONIDS)
-  .filter(([symbol]) => !["SPX", "NDX", "VIX"].includes(symbol))
-  .map(([symbol, conid]) => ({ symbol, conid }));
 
 export function Ticker() {
   const navigate = useNavigate();
-  
+
   const { data: quotes = [] } = useQuery({
     queryKey: ["ticker-quotes"],
-    queryFn: () => getMarketSnapshot(TICKER_SYMBOLS.map(s => s.conid)),
-    refetchInterval: 1_000,
-    staleTime: 500,
+    queryFn: () => getQuotes(UNIVERSE_SYMBOLS),
+    refetchInterval: 3_000,
+    staleTime: 1_500,
   });
 
-  // Enrich ticker data with real quotes
-  const tickerData = TICKER_SYMBOLS.map((s) => {
-    const quote = quotes.find((q) => q.conid === s.conid);
-    return {
-      symbol: s.symbol,
-      price: quote?.last ?? 0,
-      changePct: quote?.changePct ?? 0,
-    };
-  }).filter(s => s.price > 0);
+  const tickerData = quotes
+    .filter((q) => q.last > 0)
+    .map((q) => ({ symbol: q.symbol, price: q.last, changePct: q.changePct }));
 
   const items = [...tickerData, ...tickerData]; // Duplicate for seamless scrolling
   return (
@@ -36,8 +27,8 @@ export function Ticker() {
         {items.map((q, i) => {
           const up = q.changePct >= 0;
           return (
-            <div 
-              key={i} 
+            <div
+              key={`${q.symbol}-${i}`}
               onClick={() => navigate({ to: `/stock/${q.symbol}` })}
               className="flex items-center gap-2 text-xs cursor-pointer hover:bg-surface-2 rounded px-2 py-1 transition"
             >

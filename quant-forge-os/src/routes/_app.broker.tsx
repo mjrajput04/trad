@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LiveDot } from "@/components/Delta";
-import { Check, Plug, RefreshCw, Shield, Zap, Loader2, X } from "lucide-react";
-import { useState, useEffect } from "react";
-import { getAccountSummary, getAuthStatus, placeOrder, tickle } from "@/lib/api/ibkr";
+import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X } from "lucide-react";
+import { useState } from "react";
+import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_app/broker")({
 
 function Broker() {
   const qc = useQueryClient();
-  const { isPaper, setIsPaper, currentAccount } = useTrading();
+  const { isPaper, setIsPaper, paperConfigured, currentAccount } = useTrading();
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [type, setType] = useState("LMT");
   const [symbol, setSymbol] = useState("AAPL");
@@ -37,17 +37,51 @@ function Broker() {
   });
 
   const order = useMutation({
-    mutationFn: () => placeOrder(symbol, side, qty, type, price || undefined, stop || undefined, tp || undefined),
-    onSuccess: () => {
-      toast.success(`${side} ${qty} ${symbol} order placed`);
+    mutationFn: () => {
+      if (!symbol.trim()) throw new Error("Enter a symbol");
+      if (!qty || qty <= 0 || !Number.isFinite(qty)) throw new Error("Enter a valid quantity");
+      if (type !== "MKT" && (!price || price <= 0)) throw new Error(`${type} orders need a price`);
+      return placeOrder({
+        symbol: symbol.trim(),
+        side,
+        quantity: qty,
+        orderType: type as "MKT" | "LMT" | "STP",
+        price: type === "MKT" ? undefined : price,
+        stopLoss: stop > 0 ? stop : undefined,
+        takeProfit: tp > 0 ? tp : undefined,
+      });
+    },
+    onSuccess: (result) => {
+      toast.success(`${side} ${qty} ${symbol} sent to IBKR — #${result.orderId} (${result.status})`);
       qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
+      qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
       qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Order failed"),
   });
 
+  const confirmAndPlace = () => {
+    const priceLabel = type === "MKT" ? "market price" : `$${price}`;
+    const extras = [
+      stop > 0 ? `SL $${stop}` : null,
+      tp > 0 ? `TP $${tp}` : null,
+    ].filter(Boolean).join(", ");
+    const msg = `${side} ${qty} ${symbol} @ ${priceLabel}${extras ? ` (${extras})` : ""} — send to IBKR ${isPaper ? "paper" : "LIVE"} account ${currentAccount}?`;
+    if (window.confirm(msg)) order.mutate();
+  };
+
+  const reconnect = async () => {
+    try {
+      await tickle();
+      await ensureSession(true);
+      qc.invalidateQueries();
+      toast.success("Session refreshed");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Reconnect failed — log in to the gateway");
+    }
+  };
+
   const est = qty * price;
-  const fees = (est * 0.00035).toFixed(2);
   const connected = auth?.authenticated && auth?.connected;
 
   return (
@@ -77,16 +111,32 @@ function Broker() {
 
           <div className="mt-5 flex items-center justify-between rounded-xl hairline bg-surface-1 p-3">
             <div>
-              <div className="text-sm font-medium">{isPaper ? "Paper Trading" : "Live Trading"}</div>
-              <div className="text-[11px] text-muted-foreground">{isPaper ? "Risk-free simulation" : "Real money — orders execute on IBKR"}</div>
+              <div className="text-sm font-medium">{isPaper ? "Paper Account" : "Live Trading"}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {!paperConfigured
+                  ? "Set VITE_IBKR_PAPER_ACCOUNT_ID to enable paper mode"
+                  : isPaper
+                    ? "Uses your paper account — the gateway must be logged into it"
+                    : "Real money — orders execute on IBKR"}
+              </div>
             </div>
-            <button onClick={() => { setIsPaper(!isPaper); qc.invalidateQueries(); }} className={`relative h-6 w-11 rounded-full transition ${isPaper ? "bg-warn" : "bg-bull glow-bull"}`}>
+            <button
+              onClick={() => { setIsPaper(!isPaper); qc.invalidateQueries(); }}
+              disabled={!paperConfigured}
+              className={`relative h-6 w-11 rounded-full transition disabled:opacity-40 disabled:cursor-not-allowed ${isPaper ? "bg-warn" : "bg-bull glow-bull"}`}>
               <span className="absolute top-0.5 h-5 w-5 rounded-full bg-background transition" style={{ left: isPaper ? 2 : 22 }} />
             </button>
           </div>
 
+          {!connected && (
+            <a href={GATEWAY_LOGIN_URL} target="_blank" rel="noreferrer"
+              className="mt-3 flex items-center justify-center gap-2 h-10 rounded-lg bg-primary/15 text-primary text-xs font-semibold hover:bg-primary/25 transition">
+              <ExternalLink className="h-3.5 w-3.5" /> Log in to IBKR Gateway
+            </a>
+          )}
+
           <div className="mt-3 flex gap-2">
-            <button onClick={() => { tickle(); qc.invalidateQueries(); toast.success("Reconnected"); }}
+            <button onClick={reconnect}
               className="flex-1 h-9 rounded-lg hairline bg-surface-1 hover:bg-surface-2 text-xs font-medium inline-flex items-center justify-center gap-1.5">
               <RefreshCw className="h-3.5 w-3.5" /> Reconnect
             </button>
@@ -144,36 +194,41 @@ function Broker() {
             </Row>
             <Row label="Order Type">
               <select value={type} onChange={(e) => setType(e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm focus:outline-none">
-                <option>MKT</option><option>LMT</option><option>STP</option><option>STP LMT</option><option>BRACKET</option>
+                <option>MKT</option><option>LMT</option><option>STP</option>
               </select>
             </Row>
           </div>
-          <Row label="Limit Price">
-            <input type="number" value={price} onChange={(e) => setPrice(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num focus:outline-none" />
-          </Row>
-          <div className="grid grid-cols-2 gap-3">
-            <Row label="Stop Loss">
-              <input type="number" value={stop} onChange={(e) => setStop(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num text-bear focus:outline-none" />
+          {type !== "MKT" && (
+            <Row label={type === "STP" ? "Stop Trigger Price" : "Limit Price"}>
+              <input type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num focus:outline-none" />
             </Row>
-            <Row label="Take Profit">
-              <input type="number" value={tp} onChange={(e) => setTp(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num text-bull focus:outline-none" />
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Row label="Stop Loss (bracket)">
+              <input type="number" min={0} step="0.01" value={stop} onChange={(e) => setStop(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num text-bear focus:outline-none" />
+            </Row>
+            <Row label="Take Profit (bracket)">
+              <input type="number" min={0} step="0.01" value={tp} onChange={(e) => setTp(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num text-bull focus:outline-none" />
             </Row>
           </div>
         </div>
 
         <div className="mt-5 rounded-xl hairline bg-surface-1 p-4 space-y-2 text-xs">
-          <div className="flex justify-between"><span className="text-muted-foreground">Estimated cost</span><span className="num font-semibold">${est.toLocaleString()}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Commission est.</span><span className="num">${fees}</span></div>
-          {stop > 0 && tp > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Reward / Risk</span><span className="num text-bull">{((tp - price) / (price - stop)).toFixed(2)}R</span></div>}
-          <div className="flex justify-between"><span className="text-muted-foreground">Buying power used</span><span className="num">{summary?.buyingPower ? ((est / summary.buyingPower) * 100).toFixed(1) : "0"}%</span></div>
+          {type !== "MKT" && price > 0 && (
+            <div className="flex justify-between"><span className="text-muted-foreground">Estimated cost</span><span className="num font-semibold">${est.toLocaleString()}</span></div>
+          )}
+          {stop > 0 && tp > 0 && price > stop && (
+            <div className="flex justify-between"><span className="text-muted-foreground">Reward / Risk</span><span className="num text-bull">{((tp - price) / (price - stop)).toFixed(2)}R</span></div>
+          )}
+          <div className="flex justify-between"><span className="text-muted-foreground">Buying power used</span><span className="num">{summary?.buyingPower && est > 0 ? ((est / summary.buyingPower) * 100).toFixed(1) : "—"}%</span></div>
         </div>
 
         <button
-          onClick={() => order.mutate()}
+          onClick={confirmAndPlace}
           disabled={order.isPending || !connected}
           className={`mt-4 w-full h-11 rounded-lg text-sm font-bold tracking-wide ${side === "BUY" ? "bg-bull glow-bull" : "bg-bear glow-bear"} text-background disabled:opacity-50 inline-flex items-center justify-center gap-2`}
         >
-          {order.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{side} {qty} {symbol}{price > 0 ? ` @ $${price}` : " MKT"}</>}
+          {order.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{side} {qty} {symbol}{type === "MKT" ? " MKT" : price > 0 ? ` @ $${price}` : ""}</>}
         </button>
       </div>
     </div>

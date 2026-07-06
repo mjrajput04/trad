@@ -5,7 +5,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { Delta } from "@/components/Delta";
 import { SymbolSelector } from "@/components/SymbolSelector";
 import { fmtCompact, fmtMoney } from "@/lib/market-data";
-import { getMarketSnapshot, CONIDS, getChartData } from "@/lib/api/ibkr";
+import { getQuotes, resolveConids, getChartData } from "@/lib/api/ibkr";
 import { 
   getWatchlists, 
   getWatchlistWithItems, 
@@ -45,38 +45,38 @@ function WatchlistPage() {
     enabled: !!currentWatchlistId,
   });
 
-  // Get market data for watchlist symbols
-  const symbolConids = activeWatchlist?.items.map(item => CONIDS[item.symbol]).filter(Boolean) || [];
+  // Get market data for watchlist symbols (conids resolved live from IBKR)
+  const watchSymbols = activeWatchlist?.items.map(item => item.symbol) || [];
   const { data: quotes = [] } = useQuery({
-    queryKey: ["watchlist-quotes", symbolConids],
-    queryFn: () => symbolConids.length > 0 ? getMarketSnapshot(symbolConids) : [],
-    enabled: symbolConids.length > 0,
-    refetchInterval: 2000,
+    queryKey: ["watchlist-quotes", watchSymbols.join(",")],
+    queryFn: () => getQuotes(watchSymbols),
+    enabled: watchSymbols.length > 0,
+    refetchInterval: 3000,
   });
 
   // Get historical data for sparklines
   const { data: sparklineData = {} } = useQuery({
-    queryKey: ["watchlist-sparklines", symbolConids],
+    queryKey: ["watchlist-sparklines", watchSymbols.join(",")],
     queryFn: async () => {
-      if (symbolConids.length === 0) return {};
-      const sparklines: Record<number, number[]> = {};
-      
+      const conidMap = await resolveConids(watchSymbols);
+      const sparklines: Record<string, number[]> = {};
+
       // Get 1-day 5min data for each symbol to create sparklines
-      for (const conid of symbolConids.slice(0, 10)) { // Limit to avoid too many requests
+      for (const [symbol, conid] of Object.entries(conidMap).slice(0, 10)) {
         try {
           const chartData = await getChartData(conid, "1d", "5min");
           if (chartData.length > 0) {
             // Take last 20 data points for sparkline
-            const prices = chartData.slice(-20).map(d => d.c);
-            sparklines[conid] = prices.length >= 10 ? prices : [];
+            const prices = chartData.slice(-20).map((d: { c: number }) => d.c);
+            sparklines[symbol] = prices.length >= 10 ? prices : [];
           }
         } catch (error) {
-          console.warn(`Failed to get sparkline for conid ${conid}:`, error);
+          console.warn(`Failed to get sparkline for ${symbol}:`, error);
         }
       }
       return sparklines;
     },
-    enabled: symbolConids.length > 0,
+    enabled: watchSymbols.length > 0,
     refetchInterval: 60000, // Refresh every minute
     staleTime: 30000, // Consider data stale after 30 seconds
   });
@@ -132,46 +132,19 @@ function WatchlistPage() {
 
   const selectedSymbols = activeWatchlist?.items.map(item => item.symbol) || [];
 
-  // Enrich watchlist items with market data
+  // Enrich watchlist items with live market data (no fabricated fallbacks)
+  const quoteBySymbol = new Map(quotes.map(q => [q.symbol, q]));
   const enrichedItems = activeWatchlist?.items.map(item => {
-    const quote = quotes.find(q => q.conid === CONIDS[item.symbol]);
-    const conid = CONIDS[item.symbol];
-    const sparkData = sparklineData[conid] || [];
-    
-    // Generate consistent fallback sparkline if no real data
-    const fallbackSparkData = sparkData.length === 0 ? generateConsistentSparkline(item.symbol, quote?.last || 100) : sparkData;
-    
+    const quote = quoteBySymbol.get(item.symbol.toUpperCase());
     return {
       ...item,
       price: quote?.last || 0,
       changePct: quote?.changePct || 0,
       volume: quote?.volume || 0,
       updated: quote?.updated || 0,
-      sparkData: fallbackSparkData,
+      sparkData: sparklineData[item.symbol.toUpperCase()] || [],
     };
   }) || [];
-
-  // Generate consistent sparkline data based on symbol hash
-  function generateConsistentSparkline(symbol: string, basePrice: number): number[] {
-    // Create a simple hash from symbol for consistency
-    let hash = 0;
-    for (let i = 0; i < symbol.length; i++) {
-      hash = ((hash << 5) - hash + symbol.charCodeAt(i)) & 0xffffffff;
-    }
-    
-    const data: number[] = [];
-    let price = basePrice;
-    
-    for (let i = 0; i < 20; i++) {
-      // Use hash and index to create consistent but varied data
-      const seed = (hash + i * 1000) / 1000000;
-      const variation = Math.sin(seed) * 0.02; // ±2% variation
-      price = basePrice * (1 + variation * (i / 10));
-      data.push(price);
-    }
-    
-    return data;
-  }
 
   if (watchlistsLoading) {
     return (

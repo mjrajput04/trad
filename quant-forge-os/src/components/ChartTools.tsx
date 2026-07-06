@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pencil, TrendingUp, Minus, Circle, Square, Type, Trash2, MousePointer2, MoveRight, Scissors, GripVertical } from "lucide-react";
 
-export type DrawingTool = "none" | "vertical" | "trendline" | "horizontal" | "rectangle" | "circle";
+export type DrawingTool = "none" | "vertical" | "trendline" | "horizontal" | "rectangle" | "circle" | "fib";
 
 export interface Drawing {
   id: string;

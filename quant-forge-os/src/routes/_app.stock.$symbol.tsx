@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, TrendingUp, TrendingDown, Activity, Loader2, Zap, AlertTriangle, Bell, BookmarkPlus } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, BarChart, Line, Area, Bar, XAxis, YAxis, Tooltip, Cell, ReferenceLine, ReferenceArea } from "recharts";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ChartDrawingTools, AdvancedIndicators, enhanceDataWithIndicators, type DrawingTool, type Drawing } from "@/components/ChartTools";
 import { CandlestickChart } from "@/components/CandlestickChart";
-import { getChartData, getMarketSnapshot, CONIDS } from "@/lib/api/ibkr";
+import { getChartData, getQuotes, getConid, placeOrder as submitIbkrOrder } from "@/lib/api/ibkr";
 import { fmtMoney } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_app/stock/$symbol")({
@@ -25,6 +27,10 @@ const INDICATORS = ["SMA", "EMA", "BB", "RSI", "MACD", "ATR", "OBV", "Volume"] a
 function StockDetail() {
   const { symbol } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [conid, setConid] = useState<number | null>(null);
+  const [conidFailed, setConidFailed] = useState(false);
+  const [orderPending, setOrderPending] = useState(false);
   const [activePeriod, setActivePeriod] = useState(PERIODS[0]);
   const [chartType, setChartType] = useState<typeof CHART_TYPES[number]>("Candlestick");
   const [indicators, setIndicators] = useState<string[]>(["Volume"]);
@@ -45,20 +51,58 @@ function StockDetail() {
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanX, setLastPanX] = useState(0);
 
+  // Resolve the IBKR contract id for this symbol (works for any US stock).
   useEffect(() => {
     if (!symbol) return;
+    let cancelled = false;
+    setConid(null);
+    setConidFailed(false);
     setLoading(true);
-    fetchQuote();
-    fetchChartData();
-    const interval = setInterval(() => {
-      fetchQuote();
+    // Clear the previous symbol's data so it never flashes on the new page.
+    setChartData([]);
+    setQuote(null);
+    setViewWindow({ start: 0, end: 0 });
+    setLimitPrice("");
+    getConid(symbol as string)
+      .then((id) => {
+        if (cancelled) return;
+        if (id) setConid(id);
+        else {
+          setConidFailed(true);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setConidFailed(true);
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
+  const atPresentRef = useRef(true);
+  useEffect(() => {
+    atPresentRef.current = viewWindow.end >= chartData.length - 5;
+  }, [viewWindow, chartData.length]);
+
+  useEffect(() => {
+    if (!conid) return;
+    setLoading(true);
+    fetchQuote(conid);
+    fetchChartData(conid);
+    const quoteInterval = setInterval(() => fetchQuote(conid), 2_000);
+    const chartInterval = setInterval(() => {
       // Only auto-refresh chart if we are at the "present" (end of data)
-      if (viewWindow.end >= chartData.length - 5) {
-        fetchChartData();
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [symbol, activePeriod]);
+      if (atPresentRef.current) fetchChartData(conid);
+    }, 30_000);
+    return () => {
+      clearInterval(quoteInterval);
+      clearInterval(chartInterval);
+    };
+  }, [conid, activePeriod]);
 
   useEffect(() => {
     if (chartData.length > 0 && viewWindow.end === 0) {
@@ -154,47 +198,37 @@ function StockDetail() {
     }
   }, [visibleData]);
 
-  const fetchQuote = async () => {
+  const fetchQuote = async (id: number) => {
     try {
-      const conid = CONIDS[symbol as string];
-      if (!conid) {
-        console.error(`Symbol ${symbol} not found in CONIDS`);
-        return;
-      }
-      const data = await getMarketSnapshot([conid]);
-      if (data && data.length > 0) {
-        const q = data[0];
-        
+      const data = await getQuotes([symbol as string]);
+      const q = data.find((s) => s.conid === id) ?? data[0];
+      if (q) {
         setQuote({
           last: q.last,
           open: q.open || q.last,
           high: q.high || q.last,
           low: q.low || q.last,
-          prevClose: q.last / (1 + q.changePct / 100),
+          prevClose: q.prevClose || (q.changePct ? q.last / (1 + q.changePct / 100) : q.last),
           volume: q.volume,
           bid: q.bid,
           ask: q.ask,
         });
-        if (!limitPrice) setLimitPrice(q.last?.toFixed(2) || "");
+        // Seed the limit field once, without clobbering a value the user typed.
+        // (This runs inside a polling interval, so use a functional update — the
+        // captured `limitPrice` closure is stale and would always look empty.)
+        if (q.last) setLimitPrice((prev) => prev || q.last.toFixed(2));
       }
     } catch (err) {
       console.error("Quote fetch error:", err);
     }
   };
 
-  const fetchChartData = async () => {
+  const fetchChartData = async (id: number) => {
     try {
-      const conid = CONIDS[symbol as string];
-      if (!conid) {
-        console.error(`Symbol ${symbol} not found in CONIDS`);
-        setLoading(false);
-        return;
-      }
-      console.log(`Fetching chart data for ${symbol} (${conid}): period=${activePeriod.period}, bar=${activePeriod.bar}`);
+      const conid = id;
       // Request larger period to allow panning back
       const requestPeriod = activePeriod.label === "1D" ? "1w" : activePeriod.period;
       const data = await getChartData(conid, requestPeriod, activePeriod.bar);
-      console.log(`Received ${data.length} bars:`, data.slice(0, 3));
       const enhanced = enhanceDataWithIndicators(data).map((d: any) => ({
         ...d,
         // Range for the candlestick body
@@ -248,11 +282,43 @@ function StockDetail() {
   };
 
   const placeOrder = async () => {
+    const qty = parseInt(quantity, 10);
+    if (!qty || qty <= 0) {
+      toast.error("Enter a valid quantity");
+      return;
+    }
+    const price =
+      orderType === "limit" ? parseFloat(limitPrice)
+      : orderType === "stop" ? parseFloat(stopPrice)
+      : undefined;
+    if (orderType !== "market" && (!price || price <= 0)) {
+      toast.error(`Enter a valid ${orderType} price`);
+      return;
+    }
+
+    const side = orderSide === "buy" ? "BUY" : "SELL";
+    const ibkrType = orderType === "market" ? "MKT" : orderType === "limit" ? "LMT" : "STP";
+    const priceLabel = orderType === "market" ? "market price" : `$${price!.toFixed(2)}`;
+    if (!window.confirm(`${side} ${qty} ${symbol} @ ${priceLabel} — send to IBKR?`)) return;
+
+    setOrderPending(true);
     try {
-      alert(`Order placed: ${orderSide.toUpperCase()} ${quantity} ${symbol} at ${orderType === "limit" ? `$${limitPrice}` : "market"}`);
-      // TODO: Integrate with IBKR placeOrder API
-    } catch (err) {
+      const result = await submitIbkrOrder({
+        symbol: symbol as string,
+        side,
+        quantity: qty,
+        orderType: ibkrType,
+        price,
+      });
+      toast.success(`Order sent to IBKR — #${result.orderId} (${result.status})`);
+      queryClient.invalidateQueries({ queryKey: ["ibkr-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["ibkr-positions"] });
+      queryClient.invalidateQueries({ queryKey: ["ibkr-summary"] });
+    } catch (err: any) {
       console.error("Order error:", err);
+      toast.error(err?.message ?? "Order failed");
+    } finally {
+      setOrderPending(false);
     }
   };
 
@@ -387,7 +453,7 @@ function StockDetail() {
               const startY = p1.p >= p2.p ? y1 : y2;
               const endY = p1.p >= p2.p ? y2 : y1;
 
-              if (width < 2 && height < 2 && !isDrawing) return null;
+              if (width < 2 && height < 2 && !isDrawing) return <g />;
 
               return (
                 <line 
@@ -488,13 +554,13 @@ function StockDetail() {
     );
   }
 
-  if (!CONIDS[symbol as string]) {
+  if (conidFailed) {
     return (
       <div className="p-6 flex items-center justify-center min-h-screen">
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-warn mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2">Symbol Not Found</h2>
-          <p className="text-muted-foreground mb-4">The symbol {symbol} is not available yet.</p>
+          <p className="text-muted-foreground mb-4">IBKR has no US listing for {symbol}. Check the ticker or log in to the gateway.</p>
           <button 
             onClick={() => navigate({ to: "/" })} 
             className="px-4 h-10 rounded-lg bg-primary text-white hover:bg-primary/90 transition"
@@ -913,14 +979,19 @@ function StockDetail() {
             {/* Place Order Button */}
             <button
               onClick={placeOrder}
-              className={`w-full h-9 rounded-lg text-xs font-semibold transition ${orderSide === "buy" ? "bg-bull hover:bg-bull/90" : "bg-bear hover:bg-bear/90"} text-white`}
+              disabled={orderPending || !conid}
+              className={`w-full h-9 rounded-lg text-xs font-semibold transition disabled:opacity-50 ${orderSide === "buy" ? "bg-bull hover:bg-bull/90" : "bg-bear hover:bg-bear/90"} text-white`}
             >
-              {orderSide === "buy" ? "BUY" : "SELL"} {symbol}
+              {orderPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+              ) : (
+                <>{orderSide === "buy" ? "BUY" : "SELL"} {symbol}</>
+              )}
             </button>
 
             <div className="mt-2 text-[10px] text-muted-foreground flex items-start gap-1.5 leading-tight">
               <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-              <span>Trading involves risk. This is a simulated environment.</span>
+              <span>Orders are sent live to your IBKR account. Trading involves risk.</span>
             </div>
           </div>
         </div>

@@ -1,13 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Brain, Send, Sparkles, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Brain, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { getAccountSummary, getPositions } from "@/lib/api/ibkr";
+import { fmtMoney } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_app/copilot")({
-  head: () => ({ meta: [{ title: "AI Copilot · NOVA" }, { name: "description", content: "Built-in AI trading copilot — analysis, ideas, and risk." }] }),
+  head: () => ({ meta: [{ title: "AI Copilot · NOVA" }, { name: "description", content: "AI trading copilot (preview)." }] }),
   component: Copilot,
 });
 
-type Msg = { role: "user" | "ai"; text: string; idea?: any };
+type Msg = { role: "user" | "ai"; text: string };
 
 const SUGGESTIONS = [
   "Analyze NVDA setup for tomorrow",
@@ -20,19 +23,27 @@ function Copilot() {
   const [msgs, setMsgs] = useState<Msg[]>([
     {
       role: "ai",
-      text: "I see NVDA broke its 52-week high on 3.2x average volume with bullish RSI divergence on the 1H. Sentiment is strongly bullish (88%) following the Rubin announcement. Here's a trade plan you can act on.",
-      idea: {
-        sym: "NVDA", side: "LONG", entry: 144.20, stop: 138.40, tp: 158.60, conf: 84,
-      },
+      text: "The AI copilot backend is not connected yet — this chat is a preview and does not produce real analysis. Your live account context (right panel) is already pulled from IBKR.",
     },
   ]);
   const [input, setInput] = useState("");
+
+  const { data: summary } = useQuery({
+    queryKey: ["ibkr-summary"],
+    queryFn: getAccountSummary,
+    refetchInterval: 30_000,
+  });
+  const { data: positions = [] } = useQuery({
+    queryKey: ["ibkr-positions"],
+    queryFn: getPositions,
+    refetchInterval: 30_000,
+  });
 
   const send = (text: string) => {
     if (!text.trim()) return;
     setMsgs((m) => [...m, { role: "user", text }, {
       role: "ai",
-      text: `Working on it… I'll cross-reference indicators, sentiment, and your portfolio exposure to "${text}".`,
+      text: "The AI backend is not connected yet, so I can't answer this for real. Connect an LLM backend to enable analysis.",
     }]);
     setInput("");
   };
@@ -45,8 +56,8 @@ function Copilot() {
             <Sparkles className="h-4 w-4 text-background" />
           </div>
           <div>
-            <div className="text-sm font-semibold">NOVA Copilot</div>
-            <div className="text-[11px] text-muted-foreground">Multimodal trading assistant · GPT-class</div>
+            <div className="text-sm font-semibold">NOVA Copilot <span className="align-middle ml-1 rounded bg-warn/15 text-warn text-[9px] font-bold px-1.5 py-0.5 uppercase tracking-wider">Preview</span></div>
+            <div className="text-[11px] text-muted-foreground">AI backend not connected yet</div>
           </div>
         </div>
 
@@ -60,28 +71,6 @@ function Copilot() {
               )}
               <div className={`max-w-[80%] rounded-2xl p-4 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "glass"}`}>
                 <p className="leading-relaxed">{m.text}</p>
-                {m.idea && (
-                  <div className="mt-3 rounded-xl hairline bg-surface-1 p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-bull" />
-                        <span className="text-sm font-semibold">{m.idea.sym}</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-bull/15 text-bull">
-                          {m.idea.side}
-                        </span>
-                      </div>
-                      <span className="text-[10px] num text-muted-foreground">Conf {m.idea.conf}%</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <Field label="Entry" value={`$${m.idea.entry}`} />
-                      <Field label="Stop" value={`$${m.idea.stop}`} color="text-bear" />
-                      <Field label="Target" value={`$${m.idea.tp}`} color="text-bull" />
-                    </div>
-                    <button className="mt-3 w-full h-8 rounded-md gradient-primary text-background text-xs font-semibold">
-                      Open in Order Ticket
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           ))}
@@ -112,32 +101,16 @@ function Copilot() {
 
       <aside className="space-y-4 overflow-y-auto scrollbar-thin">
         <div className="rounded-2xl glass p-4">
-          <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Active Context</div>
+          <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Active Context · Live from IBKR</div>
           <ul className="text-xs space-y-1.5">
-            <li className="flex justify-between"><span className="text-muted-foreground">Portfolio</span><span className="num">$124,582</span></li>
-            <li className="flex justify-between"><span className="text-muted-foreground">Open positions</span><span className="num">14</span></li>
-            <li className="flex justify-between"><span className="text-muted-foreground">Watchlist</span><span className="num">25 syms</span></li>
-            <li className="flex justify-between"><span className="text-muted-foreground">Risk regime</span><span className="text-warn">Elevated</span></li>
+            <li className="flex justify-between"><span className="text-muted-foreground">Portfolio</span><span className="num">${fmtMoney(summary?.netLiquidation ?? 0)}</span></li>
+            <li className="flex justify-between"><span className="text-muted-foreground">Open positions</span><span className="num">{positions.length}</span></li>
+            <li className="flex justify-between"><span className="text-muted-foreground">Unrealized P&L</span><span className={`num ${(summary?.unrealizedPnl ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>${fmtMoney(summary?.unrealizedPnl ?? 0)}</span></li>
+            <li className="flex justify-between"><span className="text-muted-foreground">Buying power</span><span className="num">${fmtMoney(summary?.buyingPower ?? 0)}</span></li>
           </ul>
-        </div>
-        <div className="rounded-2xl glass p-4">
-          <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Recent Ideas</div>
-          <div className="space-y-2 text-xs">
-            {["NVDA Long · 84%", "AMD Long · 71%", "TSLA Hedge · 62%"].map((t) => (
-              <div key={t} className="rounded-md hairline bg-surface-1 p-2.5">{t}</div>
-            ))}
-          </div>
         </div>
       </aside>
     </div>
   );
 }
 
-function Field({ label, value, color = "" }: { label: string; value: string; color?: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`text-sm font-semibold num ${color}`}>{value}</div>
-    </div>
-  );
-}

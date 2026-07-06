@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -28,6 +28,7 @@ export type Database = {
           name?: string
           created_at?: string
         }
+        Relationships: []
       }
       watchlist_items: {
         Row: {
@@ -54,6 +55,7 @@ export type Database = {
           name?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -80,6 +82,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
         }
+        Relationships: []
       }
     }
     Views: {

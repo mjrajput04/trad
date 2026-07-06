@@ -2,11 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Delta, LiveDot } from "@/components/Delta";
-import { fmtCompact, fmtMoney, SECTORS } from "@/lib/market-data";
-import { getAccountSummary, getPositions, getMarketSnapshot, getChartData, CONIDS } from "@/lib/api/ibkr";
-import { Activity, Brain, Flame, Gauge, Loader2, Sparkles, TrendingDown, TrendingUp, Zap } from "lucide-react";
+import { fmtCompact, fmtMoney } from "@/lib/market-data";
+import { getAccountSummary, getPositions, getQuotes, getChartData, getConid } from "@/lib/api/ibkr";
+import { SYMBOL_UNIVERSE, UNIVERSE_SYMBOLS } from "@/lib/symbols";
+import { Activity, Brain, Flame, Gauge, Loader2, TrendingDown, TrendingUp, Zap } from "lucide-react";
 import {
-  Area, AreaChart, Bar, BarChart, Cell, ComposedChart,
+  Area, Bar, BarChart, Cell, ComposedChart,
   Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
@@ -20,62 +21,6 @@ export const Route = createFileRoute("/_app/")({
   component: Dashboard,
 });
 
-const SYMBOL_METADATA: Record<string, { name: string; sector: string }> = {
-  AAPL: { name: "Apple Inc.", sector: "Technology" },
-  MSFT: { name: "Microsoft Corp.", sector: "Technology" },
-  NVDA: { name: "NVIDIA Corp.", sector: "Semiconductors" },
-  GOOGL: { name: "Alphabet Inc.", sector: "Communication" },
-  AMZN: { name: "Amazon.com Inc.", sector: "Consumer Disc." },
-  META: { name: "Meta Platforms", sector: "Communication" },
-  TSLA: { name: "Tesla Inc.", sector: "Consumer Disc." },
-  JPM: { name: "JPMorgan Chase", sector: "Financials" },
-  V: { name: "Visa Inc.", sector: "Financials" },
-  NFLX: { name: "Netflix Inc.", sector: "Communication" },
-  AMD: { name: "Advanced Micro Devices", sector: "Semiconductors" },
-  INTC: { name: "Intel Corp.", sector: "Semiconductors" },
-  BABA: { name: "Alibaba Group", sector: "Consumer Disc." },
-  DIS: { name: "Walt Disney Co.", sector: "Communication" },
-  BA: { name: "Boeing Co.", sector: "Industrials" },
-  GE: { name: "General Electric", sector: "Industrials" },
-  WMT: { name: "Walmart Inc.", sector: "Consumer Staples" },
-  PG: { name: "Procter & Gamble", sector: "Consumer Staples" },
-  JNJ: { name: "Johnson & Johnson", sector: "Healthcare" },
-  HD: { name: "Home Depot", sector: "Consumer Disc." },
-  CVX: { name: "Chevron Corp.", sector: "Energy" },
-  LLY: { name: "Eli Lilly", sector: "Healthcare" },
-  XOM: { name: "Exxon Mobil", sector: "Energy" },
-  ABBV: { name: "AbbVie Inc.", sector: "Healthcare" },
-  PFE: { name: "Pfizer Inc.", sector: "Healthcare" },
-  KO: { name: "Coca-Cola Co.", sector: "Consumer Staples" },
-  COST: { name: "Costco Wholesale", sector: "Consumer Staples" },
-  ADBE: { name: "Adobe Inc.", sector: "Technology" },
-  CRM: { name: "Salesforce Inc.", sector: "Technology" },
-  ORCL: { name: "Oracle Corp.", sector: "Technology" },
-  ACN: { name: "Accenture PLC", sector: "Technology" },
-  TMO: { name: "Thermo Fisher", sector: "Healthcare" },
-  VZ: { name: "Verizon", sector: "Communication" },
-  CSCO: { name: "Cisco Systems", sector: "Technology" },
-  PEP: { name: "PepsiCo Inc.", sector: "Consumer Staples" },
-  QCOM: { name: "Qualcomm Inc.", sector: "Semiconductors" },
-  TXN: { name: "Texas Instruments", sector: "Semiconductors" },
-  INTU: { name: "Intuit Inc.", sector: "Technology" },
-  IBM: { name: "IBM Corp.", sector: "Technology" },
-  CAT: { name: "Caterpillar Inc.", sector: "Industrials" },
-  GS: { name: "Goldman Sachs", sector: "Financials" },
-  AXP: { name: "American Express", sector: "Financials" },
-  HON: { name: "Honeywell", sector: "Industrials" },
-  NEE: { name: "NextEra Energy", sector: "Utilities" },
-};
-
-const SYMBOLS = Object.entries(CONIDS)
-  .filter(([symbol]) => !["SPX", "NDX", "VIX"].includes(symbol))
-  .map(([symbol, conid]) => ({
-    symbol,
-    conid,
-    name: SYMBOL_METADATA[symbol]?.name ?? symbol,
-    sector: SYMBOL_METADATA[symbol]?.sector ?? "Other",
-  }));
-
 const PERIODS = [
   { label: "1D", period: "1d", bar: "5min" },
   { label: "5D", period: "5d", bar: "1h" },
@@ -84,8 +29,6 @@ const PERIODS = [
   { label: "1Y", period: "1y", bar: "1w" },
   { label: "5Y", period: "5y", bar: "1m" },
 ] as const;
-
-const ALL_CONIDS = SYMBOLS.map((s) => s.conid);
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -105,14 +48,21 @@ function Dashboard() {
 
   const { data: quotes = [] } = useQuery({
     queryKey: ["ibkr-quotes"],
-    queryFn: () => getMarketSnapshot(ALL_CONIDS),
-    refetchInterval: 1_000,
-    staleTime: 500,
+    queryFn: () => getQuotes(UNIVERSE_SYMBOLS),
+    refetchInterval: 3_000,
+    staleTime: 1_500,
+  });
+
+  const { data: aaplConid } = useQuery({
+    queryKey: ["ibkr-conid", "AAPL"],
+    queryFn: () => getConid("AAPL"),
+    staleTime: Infinity,
   });
 
   const { data: chartData = [], isFetching: chartLoading } = useQuery({
-    queryKey: ["ibkr-chart-AAPL", activePeriod.period, activePeriod.bar],
-    queryFn: () => getChartData(265598, activePeriod.period, activePeriod.bar),
+    queryKey: ["ibkr-chart-AAPL", activePeriod.period, activePeriod.bar, aaplConid],
+    queryFn: () => getChartData(aaplConid!, activePeriod.period, activePeriod.bar),
+    enabled: !!aaplConid,
     refetchInterval: activePeriod.label === "1D" ? 10_000 : 60_000,
   });
 
@@ -121,13 +71,15 @@ function Dashboard() {
   const buyingPower = summary?.buyingPower ?? 0;
   const openCount = positions.length;
 
-  const enriched = SYMBOLS.map((s) => {
-    const q = quotes.find((q) => q.conid === s.conid);
+  const quoteBySymbol = new Map(quotes.map((q) => [q.symbol, q]));
+  const enriched = SYMBOL_UNIVERSE.map((s) => {
+    const q = quoteBySymbol.get(s.symbol);
     return { ...s, last: q?.last ?? 0, changePct: q?.changePct ?? 0, volume: q?.volume ?? 0, updated: q?.updated ?? 0 };
   }).filter((s) => s.last > 0);
 
-  const lastUpdated = enriched.length > 0
-    ? new Date(Math.max(...enriched.map(e => e.updated))).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  const maxUpdated = enriched.length > 0 ? Math.max(...enriched.map((e) => e.updated)) : 0;
+  const lastUpdated = maxUpdated > 0
+    ? new Date(maxUpdated).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : null;
 
   const gainers = [...enriched].sort((a, b) => b.changePct - a.changePct).slice(0, 6);
@@ -168,13 +120,16 @@ function Dashboard() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  const fgIndex = 72;
+  // Market breadth: % of universe symbols trading up today (live).
+  const advancers = enriched.filter((s) => s.changePct > 0).length;
+  const breadth = enriched.length > 0 ? Math.round((advancers / enriched.length) * 100) : 0;
+  const breadthLabel = breadth >= 60 ? "Bullish" : breadth <= 40 ? "Bearish" : "Neutral";
 
   return (
     <div className="p-6 space-y-6">
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Net Liquidation" value={`$${fmtMoney(netLiq)}`} delta={netLiq > 0 ? ((netLiq - 10000) / 10000) * 100 : 0} icon={Activity} accent="primary" />
+        <StatCard label="Net Liquidation" value={`$${fmtMoney(netLiq)}`} icon={Activity} accent="primary" />
         <StatCard label="Unrealized P&L" value={`${totalPnl >= 0 ? "+" : ""}$${fmtMoney(totalPnl)}`} delta={netLiq > 0 ? (totalPnl / netLiq) * 100 : 0} icon={TrendingUp} accent="bull" />
         <StatCard label="Open Positions" value={String(openCount)} icon={Gauge} accent="violet" />
         <StatCard label="Buying Power" value={`$${fmtMoney(buyingPower)}`} icon={Zap} accent="primary" />
@@ -318,19 +273,19 @@ function Dashboard() {
             <div className="relative">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold flex items-center gap-2">
-                  <Flame className="h-4 w-4 text-warn" /> Fear & Greed
+                  <Flame className="h-4 w-4 text-warn" /> Market Breadth
                 </div>
-                <span className="text-[11px] text-muted-foreground">CNN Index</span>
+                <span className="text-[11px] text-muted-foreground">% advancers · live</span>
               </div>
               <div className="mt-4 flex items-end gap-3">
-                <div className="text-5xl font-bold num">{fgIndex}</div>
-                <div className="pb-2 text-xs font-medium text-warn uppercase tracking-wider">Greed</div>
+                <div className="text-5xl font-bold num">{breadth}</div>
+                <div className="pb-2 text-xs font-medium text-warn uppercase tracking-wider">{breadthLabel}</div>
               </div>
               <div className="mt-4 h-2 rounded-full bg-surface-2 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-bear via-warn to-bull" style={{ width: `${fgIndex}%` }} />
+                <div className="h-full rounded-full bg-gradient-to-r from-bear via-warn to-bull" style={{ width: `${breadth}%` }} />
               </div>
               <div className="mt-2 flex justify-between text-[10px] text-muted-foreground uppercase tracking-wider">
-                <span>Fear</span><span>Neutral</span><span>Greed</span>
+                <span>Bearish</span><span>Neutral</span><span>Bullish</span>
               </div>
             </div>
           </div>
@@ -390,7 +345,7 @@ function Dashboard() {
                   onClick={(data) => navigate({ to: `/stock/${data.symbol}` })}
                   cursor="pointer"
                 >
-                  {enriched.map((s) => (
+                  {byVolume.map((s) => (
                     <Cell key={s.symbol} fill={s.changePct >= 0 ? "oklch(0.78 0.18 152)" : "oklch(0.66 0.22 22)"} />
                   ))}
                 </Bar>
@@ -415,7 +370,7 @@ function Dashboard() {
             <div className="text-[11px] text-muted-foreground">% change today</div>
           </div>
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-violet" /> AI clustering active
+            <LiveDot /> Live from IBKR
           </div>
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
@@ -497,7 +452,7 @@ function StatCard({ label, value, delta, icon: Icon, accent = "primary" }: {
       {delta !== undefined && (
         <div className="mt-3 flex items-center gap-2">
           <Delta value={delta} />
-          <span className="text-xs text-muted-foreground">vs. open</span>
+          <span className="text-xs text-muted-foreground">of net liq</span>
         </div>
       )}
     </div>

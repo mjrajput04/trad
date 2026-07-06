@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, Mail, Send, Smartphone, Globe } from "lucide-react";
-import { QUOTES } from "@/lib/market-data";
+import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 
 export const Route = createFileRoute("/_app/alerts")({
   head: () => ({ meta: [{ title: "Alerts · NOVA" }, { name: "description", content: "AI alert center with multi-channel delivery." }] }),
@@ -19,15 +19,15 @@ function Alerts() {
   return (
     <div className="p-6 space-y-5">
       <div>
-        <h1 className="text-xl font-semibold">AI Alert Center</h1>
-        <p className="text-sm text-muted-foreground">Realtime alerts delivered across all your channels.</p>
+        <h1 className="text-xl font-semibold">Alert Center <span className="align-middle ml-2 rounded bg-warn/15 text-warn text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wider">Preview</span></h1>
+        <p className="text-sm text-muted-foreground">Alert engine is not connected yet — the feed below shows sample data.</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-2xl glass p-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="text-sm font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-info" /> Live Feed</div>
-            <span className="text-[11px] text-muted-foreground">5 today</span>
+            <div className="text-sm font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-info" /> Sample Feed</div>
+            <span className="text-[11px] text-muted-foreground">demo data</span>
           </div>
           <div className="space-y-2">
             {ALERTS.map((a, i) => (
@@ -71,7 +71,7 @@ function Alerts() {
             <div className="text-sm font-semibold mb-3">New Alert</div>
             <div className="space-y-2">
               <select className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm focus:outline-none">
-                {QUOTES.slice(0, 8).map((q) => <option key={q.symbol}>{q.symbol}</option>)}
+                {SYMBOL_UNIVERSE.slice(0, 12).map((q) => <option key={q.symbol}>{q.symbol}</option>)}
               </select>
               <select className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm">
                 <option>Price crosses above</option>
@@ -80,7 +80,7 @@ function Alerts() {
                 <option>Volume spike</option>
               </select>
               <input className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num" placeholder="Target value" />
-              <button className="w-full h-9 rounded-lg gradient-primary text-background text-xs font-semibold">Create Alert</button>
+              <button disabled title="Alert engine coming soon" className="w-full h-9 rounded-lg gradient-primary text-background text-xs font-semibold opacity-50 cursor-not-allowed">Create Alert (coming soon)</button>
             </div>
           </div>
         </div>
