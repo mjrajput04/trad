@@ -60,15 +60,17 @@ async function initBrokerage() {
         let r = await rawFetch("/iserver/accounts");
         // After an SSO login the /portfolio/* session works, but the iserver
         // (trading + market-data) session is often NOT live yet — /iserver/accounts
-        // and every /iserver/marketdata/* call then return 400. A one-shot
-        // /iserver/reauthenticate brings the brokerage session up; give it a few
-        // seconds, then re-check /iserver/accounts.
+        // and every /iserver/marketdata/* call then return 400. /iserver/reauthenticate
+        // brings the brokerage session up; it comes up asynchronously, so poll
+        // /iserver/accounts a few times (tickle in between) until it succeeds.
         if (!r.ok && !reauthTried) {
           reauthTried = true;
           await rawFetch("/iserver/reauthenticate", { method: "POST" }).catch(() => {});
-          await new Promise((res) => setTimeout(res, 3000));
-          await rawFetch("/tickle", { method: "POST" }).catch(() => {});
-          r = await rawFetch("/iserver/accounts");
+          for (let i = 0; i < 4 && !r.ok; i++) {
+            await new Promise((res) => setTimeout(res, 2000));
+            await rawFetch("/tickle", { method: "POST" }).catch(() => {});
+            r = await rawFetch("/iserver/accounts");
+          }
         }
         rawFetch("/portfolio/accounts").catch(() => {}); // best-effort prime
         if (r.ok) brokerageReady = true;
