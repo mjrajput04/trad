@@ -51,14 +51,27 @@ export interface AuthStatus {
 //   - /portfolio/accounts → primes /portfolio/* (summary, positions); best-effort.
 let brokerageReady = false;
 let brokeragePromise: Promise<void> | null = null;
+let reauthTried = false;
 async function initBrokerage() {
   if (brokerageReady) return;
   if (!brokeragePromise) {
     brokeragePromise = (async () => {
       try {
-        const iserver = await rawFetch("/iserver/accounts");
+        let r = await rawFetch("/iserver/accounts");
+        // After an SSO login the /portfolio/* session works, but the iserver
+        // (trading + market-data) session is often NOT live yet — /iserver/accounts
+        // and every /iserver/marketdata/* call then return 400. A one-shot
+        // /iserver/reauthenticate brings the brokerage session up; give it a few
+        // seconds, then re-check /iserver/accounts.
+        if (!r.ok && !reauthTried) {
+          reauthTried = true;
+          await rawFetch("/iserver/reauthenticate", { method: "POST" }).catch(() => {});
+          await new Promise((res) => setTimeout(res, 3000));
+          await rawFetch("/tickle", { method: "POST" }).catch(() => {});
+          r = await rawFetch("/iserver/accounts");
+        }
         rawFetch("/portfolio/accounts").catch(() => {}); // best-effort prime
-        if (iserver.ok) brokerageReady = true;
+        if (r.ok) brokerageReady = true;
       } catch {
         /* retried on next call */
       }
@@ -106,6 +119,8 @@ export async function ensureSession(force = false): Promise<boolean> {
   if (force) {
     sessionPromise = null;
     brokerageReady = false;
+    brokeragePromise = null;
+    reauthTried = false;
   }
   if (!sessionPromise) sessionPromise = bootstrapSession();
   const ok = await sessionPromise;
