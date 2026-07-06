@@ -49,7 +49,18 @@ function Broker() {
   const [price, setPrice] = useState(search.price ?? 0);
   const [stop, setStop] = useState(search.stop ?? 0);
   const [tp, setTp] = useState(search.tp ?? 0);
-  const fromAlert = !!search.symbol && (search.price ?? 0) > 0;
+  const [fromAlert, setFromAlert] = useState(!!search.symbol && (search.price ?? 0) > 0);
+
+  // Changing the symbol drops any prefilled price/stop/target — those levels
+  // belonged to the previous (alert) symbol and are meaningless for a different
+  // stock (e.g. an NVDA stop of $194 on a $73 UBER order, which IBKR would reject).
+  const changeSymbol = (s: string) => {
+    setSymbol(s);
+    setPrice(0);
+    setStop(0);
+    setTp(0);
+    setFromAlert(false);
+  };
 
   const { data: auth } = useQuery({
     queryKey: ["ibkr-auth"],
@@ -68,6 +79,18 @@ function Broker() {
       if (!symbol.trim()) throw new Error("Enter a symbol");
       if (!qty || qty <= 0 || !Number.isFinite(qty)) throw new Error("Enter a valid quantity");
       if (type !== "MKT" && (!price || price <= 0)) throw new Error(`${type} orders need a price`);
+      // Bracket sanity: a long's stop sits below its target (and, for a priced
+      // order, below the entry with the target above); a short is the mirror.
+      if (stop > 0 && tp > 0) {
+        if (side === "BUY" && stop >= tp) throw new Error("BUY bracket: stop-loss must be below take-profit");
+        if (side === "SELL" && stop <= tp) throw new Error("SELL bracket: stop-loss must be above take-profit");
+      }
+      if (type !== "MKT" && price > 0) {
+        if (side === "BUY" && stop > 0 && stop >= price) throw new Error("BUY: stop-loss must be below the limit price");
+        if (side === "BUY" && tp > 0 && tp <= price) throw new Error("BUY: take-profit must be above the limit price");
+        if (side === "SELL" && stop > 0 && stop <= price) throw new Error("SELL: stop-loss must be above the limit price");
+        if (side === "SELL" && tp > 0 && tp >= price) throw new Error("SELL: take-profit must be below the limit price");
+      }
       return placeOrder({
         symbol: symbol.trim(),
         side,
@@ -220,7 +243,7 @@ function Broker() {
 
         <div className="space-y-3">
           <Row label="Symbol">
-            <SymbolPicker value={symbol} onChange={setSymbol} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm font-semibold focus:outline-none" />
+            <SymbolPicker value={symbol} onChange={changeSymbol} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm font-semibold focus:outline-none" />
           </Row>
           <div className="grid grid-cols-2 gap-3">
             <Row label="Quantity">
