@@ -6,6 +6,7 @@ import {
   Layers,
   ListOrdered,
   BellRing,
+  History,
   Plug,
   Settings,
   TrendingUp,
@@ -19,6 +20,7 @@ const NAV = [
   { to: "/portfolio", label: "Portfolio", icon: Wallet },
   { to: "/positions", label: "Positions", icon: Layers },
   { to: "/orders", label: "Orders", icon: ListOrdered },
+  { to: "/history", label: "History", icon: History },
 ] as const;
 
 const SYS = [
