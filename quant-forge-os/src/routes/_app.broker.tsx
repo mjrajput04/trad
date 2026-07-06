@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LiveDot } from "@/components/Delta";
-import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X } from "lucide-react";
+import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
@@ -141,14 +141,13 @@ function Broker() {
     onError: (e: any) => toast.error(e?.message ?? "Order failed"),
   });
 
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   const confirmAndPlace = () => {
-    const priceLabel = type === "MKT" ? "market price" : `$${price}`;
-    const extras = [
-      stop > 0 ? `SL $${stop}` : null,
-      tp > 0 ? `TP $${tp}` : null,
-    ].filter(Boolean).join(", ");
-    const msg = `${side} ${qty} ${symbol} @ ${priceLabel}${extras ? ` (${extras})` : ""} — send to IBKR ${isPaper ? "paper" : "LIVE"} account ${currentAccount}?`;
-    if (window.confirm(msg)) order.mutate();
+    if (!symbol.trim()) { toast.error("Enter a symbol"); return; }
+    if (!qty || qty <= 0) { toast.error("Enter a valid quantity"); return; }
+    if (type !== "MKT" && (!price || price <= 0)) { toast.error(`${type} orders need a price`); return; }
+    setConfirmOpen(true);
   };
 
   const reconnect = async () => {
@@ -335,6 +334,49 @@ function Broker() {
           {order.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{side} {qty} {symbol}{type === "MKT" ? " MKT" : price > 0 ? ` @ $${price}` : ""}</>}
         </button>
       </div>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setConfirmOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl glass hairline p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="h-4 w-4 text-info" />
+              <h3 className="text-base font-semibold">Confirm order</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Sending to IBKR {isPaper ? "paper" : "live"} account <span className="num">{currentAccount}</span>.
+            </p>
+
+            <div className="rounded-xl hairline bg-surface-1 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className={`text-lg font-bold ${side === "BUY" ? "text-bull" : "text-bear"}`}>{side}</span>
+                <span className="text-lg font-bold num">{qty} {symbol}</span>
+              </div>
+              <div className="flex justify-between text-xs"><span className="text-muted-foreground">Order type</span><span className="num">{type === "MKT" ? "Market" : `${type} @ $${fmtMoney(price)}`}</span></div>
+              {nowPrice > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Current price</span><span className="num">${fmtMoney(nowPrice)}</span></div>}
+              {stop > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Stop loss</span><span className="num text-bear">${fmtMoney(stop)}</span></div>}
+              {tp > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Take profit</span><span className="num text-bull">${fmtMoney(tp)}</span></div>}
+              {type !== "MKT" && price > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Estimated cost</span><span className="num">${est.toLocaleString()}</span></div>}
+            </div>
+
+            {!isPaper && (
+              <div className="mt-3 rounded-lg bg-bear/10 border border-bear/20 px-3 py-2 text-[11px] text-bear flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Live account — this places a real-money order.
+              </div>
+            )}
+
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => setConfirmOpen(false)} className="flex-1 h-10 rounded-lg hairline bg-surface-1 hover:bg-surface-2 text-sm font-semibold">Cancel</button>
+              <button
+                onClick={() => { setConfirmOpen(false); order.mutate(); }}
+                disabled={order.isPending}
+                className={`flex-1 h-10 rounded-lg text-sm font-bold text-background ${side === "BUY" ? "bg-bull glow-bull" : "bg-bear glow-bear"} disabled:opacity-50 inline-flex items-center justify-center gap-2`}
+              >
+                {order.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Confirm ${side}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
