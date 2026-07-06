@@ -43,22 +43,29 @@ export interface AuthStatus {
 }
 
 // IBKR CP has two subsystems that each need a one-time init call:
-//   - /iserver/accounts  → unlocks /iserver/* (orders, market data)
-//   - /portfolio/accounts → unlocks /portfolio/* (summary, positions)
-// Calling the portfolio endpoints (summary/positions) before /portfolio/accounts
-// returns errors or empty data, so both must run before any data fetch.
+//   - /iserver/accounts  → REQUIRED before any /iserver/* market-data call.
+//     Skip it and the gateway returns 400 on snapshot/history — even for a
+//     fully authenticated session. This must run regardless of what
+//     /iserver/auth/status reports (that flag can lag behind a working SSO
+//     session, so we never gate the prime on it).
+//   - /portfolio/accounts → primes /portfolio/* (summary, positions); best-effort.
 let brokerageReady = false;
+let brokeragePromise: Promise<void> | null = null;
 async function initBrokerage() {
   if (brokerageReady) return;
-  try {
-    const [iserver, portfolio] = await Promise.all([
-      rawFetch("/iserver/accounts"),
-      rawFetch("/portfolio/accounts"),
-    ]);
-    if (iserver.ok && portfolio.ok) brokerageReady = true;
-  } catch {
-    /* retried on next call */
+  if (!brokeragePromise) {
+    brokeragePromise = (async () => {
+      try {
+        const iserver = await rawFetch("/iserver/accounts");
+        rawFetch("/portfolio/accounts").catch(() => {}); // best-effort prime
+        if (iserver.ok) brokerageReady = true;
+      } catch {
+        /* retried on next call */
+      }
+    })();
   }
+  await brokeragePromise;
+  brokeragePromise = null; // allow a retry next call if it didn't take
 }
 
 async function bootstrapSession(): Promise<boolean> {
@@ -139,6 +146,11 @@ export async function getAuthStatus(): Promise<AuthStatus> {
 
 async function ibkr<T>(path: string, options?: RequestInit): Promise<T> {
   await ensureSession();
+  // Prime /iserver/accounts before any data request. Runs once (guarded by
+  // brokerageReady). Without this, /iserver/marketdata/* returns 400 even
+  // though /portfolio/* works — which is why quotes/charts were blank while
+  // the account summary loaded.
+  await initBrokerage();
 
   let res = await rawFetch(path, options);
 
