@@ -1,9 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// The dashboard was removed — land on Alerts (the live TradeScope feed, which
-// works even before the IBKR gateway session is up).
+// The dashboard was removed — land on Positions (a stable IBKR page that
+// renders even when data is still loading or the gateway is offline).
 export const Route = createFileRoute("/_app/")({
   beforeLoad: () => {
-    throw redirect({ to: "/alerts" });
+    throw redirect({ to: "/positions" });
   },
 });

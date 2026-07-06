@@ -15,8 +15,11 @@ export const Route = createFileRoute("/_app/alerts")({
   component: Alerts,
 });
 
-const money = (n: number) => `$${fmtMoney(n)}`;
-const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+const money = (n?: number) => `$${fmtMoney(Number(n) || 0)}`;
+const pct = (n?: number) => {
+  const v = Number(n) || 0;
+  return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+};
 const timeAgo = (iso?: string) => {
   if (!iso) return "";
   const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -135,7 +138,7 @@ function Alerts() {
                   <div key={q.symbol} className="flex items-center justify-between rounded-lg hairline bg-surface-1 px-3 py-2">
                     <div className="text-xs">
                       <div className="font-semibold">{q.symbol}</div>
-                      <div className="text-[10px] text-muted-foreground">{q.name.replace(/ · .*/, "")}</div>
+                      <div className="text-[10px] text-muted-foreground">{(q.name ?? q.symbol ?? "").replace(/ · .*/, "")}</div>
                     </div>
                     <div className="text-right num">
                       <div className="text-sm font-semibold">{money(q.price)}</div>
