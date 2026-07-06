@@ -39,12 +39,12 @@ function Alerts() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["ts-alerts"],
     queryFn: getTsAlerts,
-    refetchInterval: 60_000,
+    refetchInterval: 20_000,
   });
   const { data: quotesData } = useQuery({
     queryKey: ["ts-quotes"],
     queryFn: getTsQuotes,
-    refetchInterval: 5_000,
+    refetchInterval: 1_000, // live prices tick every second (matches the engine)
   });
   const { data: backtest } = useQuery({
     queryKey: ["ts-backtest"],
