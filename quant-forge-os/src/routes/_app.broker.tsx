@@ -2,8 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LiveDot } from "@/components/Delta";
 import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X } from "lucide-react";
-import { useState } from "react";
-import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { useState, useEffect, useRef } from "react";
+import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { SymbolPicker } from "@/components/SymbolPicker";
@@ -51,15 +51,46 @@ function Broker() {
   const [tp, setTp] = useState(search.tp ?? 0);
   const [fromAlert, setFromAlert] = useState(!!search.symbol && (search.price ?? 0) > 0);
 
-  // Changing the symbol drops any prefilled price/stop/target — those levels
-  // belonged to the previous (alert) symbol and are meaningless for a different
-  // stock (e.g. an NVDA stop of $194 on a $73 UBER order, which IBKR would reject).
+  // Live price for the selected symbol — shown next to the ticket and used to
+  // auto-fill sensible levels when you pick a new stock.
+  const { data: liveQuote } = useQuery({
+    queryKey: ["order-quote", symbol],
+    queryFn: () => getQuotes([symbol]),
+    enabled: symbol.trim().length > 0,
+    refetchInterval: 3_000,
+  });
+  const q = liveQuote?.[0];
+  const nowPrice = q?.last ?? 0;
+  const nowChange = q?.changePct ?? 0;
+
+  // When you pick a NEW symbol, auto-fill the limit price at the live price and
+  // suggest a 2% stop / 3% target (mirrored for a short). You can adjust or
+  // clear these before sending. Skips when the ticket was prefilled by an alert.
+  const autofilledFor = useRef<string>(fromAlert ? symbol : "");
+  useEffect(() => {
+    if (nowPrice > 0 && autofilledFor.current !== symbol) {
+      autofilledFor.current = symbol;
+      const p = Number(nowPrice.toFixed(2));
+      setPrice(p);
+      if (side === "BUY") {
+        setStop(Number((p * 0.98).toFixed(2)));
+        setTp(Number((p * 1.03).toFixed(2)));
+      } else {
+        setStop(Number((p * 1.02).toFixed(2)));
+        setTp(Number((p * 0.97).toFixed(2)));
+      }
+    }
+  }, [nowPrice, symbol, side]);
+
+  // Changing the symbol drops the old (alert) levels; the effect above then
+  // re-fills from the new stock's live price.
   const changeSymbol = (s: string) => {
     setSymbol(s);
     setPrice(0);
     setStop(0);
     setTp(0);
     setFromAlert(false);
+    autofilledFor.current = "";
   };
 
   const { data: auth } = useQuery({
@@ -244,6 +275,22 @@ function Broker() {
         <div className="space-y-3">
           <Row label="Symbol">
             <SymbolPicker value={symbol} onChange={changeSymbol} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm font-semibold focus:outline-none" />
+            {nowPrice > 0 && (
+              <div className="mt-1 flex items-center gap-2 text-[11px]">
+                <span className="text-muted-foreground">Current price</span>
+                <span className="num font-semibold">${fmtMoney(nowPrice)}</span>
+                <span className={`num ${nowChange >= 0 ? "text-bull" : "text-bear"}`}>
+                  {nowChange >= 0 ? "+" : ""}{nowChange.toFixed(2)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { const p = Number(nowPrice.toFixed(2)); setPrice(p); if (side === "BUY") { setStop(Number((p * 0.98).toFixed(2))); setTp(Number((p * 1.03).toFixed(2))); } else { setStop(Number((p * 1.02).toFixed(2))); setTp(Number((p * 0.97).toFixed(2))); } }}
+                  className="ml-auto text-primary hover:underline"
+                >
+                  Use live price
+                </button>
+              </div>
+            )}
           </Row>
           <div className="grid grid-cols-2 gap-3">
             <Row label="Quantity">
