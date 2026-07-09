@@ -35,6 +35,18 @@ function sentimentColor(s?: string) {
   return "text-muted-foreground bg-surface-2";
 }
 
+// Inverse ETFs rise when the market falls — buying one is a bearish play, all
+// IBKR-tradable. Shown when the major indices are red so you're not stuck only
+// going long into a down market.
+const INVERSE_ETFS = [
+  { symbol: "SH", name: "Inverse S&P 500 (1x)" },
+  { symbol: "PSQ", name: "Inverse NASDAQ-100 (1x)" },
+  { symbol: "DOG", name: "Inverse Dow 30 (1x)" },
+  { symbol: "SQQQ", name: "Inverse NASDAQ-100 (3x)" },
+  { symbol: "SPXU", name: "Inverse S&P 500 (3x)" },
+  { symbol: "SDOW", name: "Inverse Dow 30 (3x)" },
+];
+
 function Alerts() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["ts-alerts"],
@@ -59,10 +71,18 @@ function Alerts() {
   const indices = (quotesData?.quotes ?? []).filter((q) => INDEX_SYMS.includes(q.symbol));
   const stocks = (quotesData?.quotes ?? []).filter((q) => !INDEX_SYMS.includes(q.symbol));
 
-  // Defensive locals — never assume the engine returned every field/array.
-  const alerts = data?.alerts ?? [];
+  // Market direction from the major indices — used to surface downside plays.
+  const indexAvg = indices.length ? indices.reduce((a, q) => a + (q.changePct || 0), 0) / indices.length : 0;
+  const marketDown = indices.length > 0 && indexAvg < -0.05;
+
+  // Defensive locals + validity: only keep alerts/best-trade with real levels
+  // (the engine occasionally emits an empty best-trade → "Score NaN / $0.00").
+  const valid = (a?: TsAlert | null): a is TsAlert =>
+    !!a && !!a.symbol && Number(a.entry) > 0 && Number.isFinite(Number(a.score));
+  const alerts = (data?.alerts ?? []).filter(valid);
   const closed = data?.closed ?? [];
-  const bestTrade = data?.bestTrade ?? null;
+  const rawBest = data?.bestTrade;
+  const bestTrade = valid(rawBest) ? rawBest : null;
 
   return (
     <div className="p-6 space-y-5">
@@ -98,8 +118,43 @@ function Alerts() {
         </div>
       ) : (
         <>
-          {/* ---- Best Trade ---- */}
+          {/* ---- Best Trade (only when valid) ---- */}
           {bestTrade && <BestTrade a={bestTrade} now={nowPrice(bestTrade.symbol)} />}
+
+          {/* ---- Downside plays when the market is red ---- */}
+          {marketDown && (
+            <section className="rounded-2xl glass p-5 border border-bear/20">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-bear" />
+                <h2 className="text-sm font-semibold">Market is down {indexAvg.toFixed(2)}% — downside plays</h2>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1 mb-3">
+                Inverse ETFs go UP when the market falls. Buying one is a bearish bet — all IBKR-tradable.
+                Higher multiples (3x) move faster and are riskier.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {INVERSE_ETFS.map((e) => {
+                  const p = nowPrice(e.symbol);
+                  return (
+                    <div key={e.symbol} className="rounded-xl hairline bg-surface-1 p-3 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-sm">{e.symbol}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">{e.name}</div>
+                        {p != null && <div className="text-[11px] num text-muted-foreground">{money(p)}</div>}
+                      </div>
+                      <Link
+                        to="/broker"
+                        search={{ symbol: e.symbol, side: "BUY", type: "MKT" }}
+                        className="shrink-0 h-8 px-3 rounded-lg bg-bear/90 hover:bg-bear text-background text-xs font-bold inline-flex items-center gap-1 transition"
+                      >
+                        <ArrowUpRight className="h-3.5 w-3.5" /> Buy
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* ---- Buy Alerts ---- */}
           <section>
