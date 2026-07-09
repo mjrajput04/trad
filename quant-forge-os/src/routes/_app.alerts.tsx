@@ -97,10 +97,34 @@ function Alerts() {
   // (the engine occasionally emits an empty best-trade → "Score NaN / $0.00").
   const valid = (a?: TsAlert | null): a is TsAlert =>
     !!a && !!a.symbol && Number(a.entry) > 0 && Number.isFinite(Number(a.score));
-  const alerts = (data?.alerts ?? []).filter(valid);
+
+  // QUALITY GATE: never suggest a setup that is already failing. If the live
+  // price has slid more than a third of the way from entry toward the stop,
+  // buying it now is chasing a loser — hide it. Better 2 working setups than 5
+  // padded ones. (No live quote yet → keep; it gets re-checked every second.)
+  const working = (a: TsAlert): boolean => {
+    const now = nowPrice(a.symbol);
+    if (now == null || now <= 0) return true;
+    if (now >= a.entry) return true; // at/above entry — heading to target
+    const span = a.entry - a.stop;
+    if (span <= 0) return true;
+    return (a.entry - now) / span < 0.34;
+  };
+
+  const validAlerts = (data?.alerts ?? []).filter(valid);
+  const alerts = validAlerts
+    .filter(working)
+    // Strongest first: in-profit distance toward target, then score.
+    .sort((x, y) => {
+      const px = ((nowPrice(x.symbol) ?? x.entry) - x.entry) / x.entry;
+      const py = ((nowPrice(y.symbol) ?? y.entry) - y.entry) / y.entry;
+      return py - px || y.score - x.score;
+    });
+  const hiddenCount = validAlerts.length - alerts.length;
   const closed = data?.closed ?? [];
   const rawBest = data?.bestTrade;
-  const bestTrade = valid(rawBest) ? rawBest : null;
+  // Best Trade must pass the same gate; otherwise promote the top working alert.
+  const bestTrade = valid(rawBest) && working(rawBest) ? rawBest : (alerts[0] ?? null);
 
   return (
     <div className="p-6 space-y-5">
@@ -196,11 +220,16 @@ function Alerts() {
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold">Buy Alerts</h2>
-              <span className="text-[11px] text-muted-foreground">{alerts.length} active · min score {data?.minScore ?? "—"}</span>
+              <span className="text-[11px] text-muted-foreground">
+                {alerts.length} working
+                {hiddenCount > 0 && <span className="text-warn"> · {hiddenCount} hidden (slid toward stop)</span>}
+              </span>
             </div>
             {alerts.length === 0 ? (
               <div className="rounded-2xl glass p-8 text-center text-muted-foreground text-sm">
-                No setups meet the strict standard right now. Quality over quantity — check back soon.
+                {hiddenCount > 0
+                  ? `${hiddenCount} setup${hiddenCount > 1 ? "s" : ""} exist but all have slid toward their stop — not worth buying. Waiting for fresh ones.`
+                  : "No setups meet the strict standard right now. Quality over quantity — check back soon."}
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
