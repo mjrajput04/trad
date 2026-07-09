@@ -7,6 +7,7 @@ import {
   ListOrdered,
   BellRing,
   History,
+  BarChart3,
   Plug,
   Settings,
   TrendingUp,
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/positions", label: "Positions", icon: Layers },
   { to: "/orders", label: "Orders", icon: ListOrdered },
   { to: "/history", label: "History", icon: History },
+  { to: "/analysis", label: "Analysis", icon: BarChart3 },
 ] as const;
 
 const SYS = [

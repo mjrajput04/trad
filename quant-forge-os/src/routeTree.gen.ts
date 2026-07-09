@@ -20,6 +20,7 @@ import { Route as AppPortfolioRouteImport } from './routes/_app.portfolio'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppHistoryRouteImport } from './routes/_app.history'
 import { Route as AppBrokerRouteImport } from './routes/_app.broker'
+import { Route as AppAnalysisRouteImport } from './routes/_app.analysis'
 import { Route as AppAlertsRouteImport } from './routes/_app.alerts'
 import { Route as AppStockSymbolRouteImport } from './routes/_app.stock.$symbol'
 
@@ -77,6 +78,11 @@ const AppBrokerRoute = AppBrokerRouteImport.update({
   path: '/broker',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAnalysisRoute = AppAnalysisRouteImport.update({
+  id: '/analysis',
+  path: '/analysis',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAlertsRoute = AppAlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRoute
   '/alerts': typeof AppAlertsRoute
+  '/analysis': typeof AppAnalysisRoute
   '/broker': typeof AppBrokerRoute
   '/history': typeof AppHistoryRoute
   '/orders': typeof AppOrdersRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/alerts': typeof AppAlertsRoute
+  '/analysis': typeof AppAnalysisRoute
   '/broker': typeof AppBrokerRoute
   '/history': typeof AppHistoryRoute
   '/orders': typeof AppOrdersRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/_app/alerts': typeof AppAlertsRoute
+  '/_app/analysis': typeof AppAnalysisRoute
   '/_app/broker': typeof AppBrokerRoute
   '/_app/history': typeof AppHistoryRoute
   '/_app/orders': typeof AppOrdersRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/alerts'
+    | '/analysis'
     | '/broker'
     | '/history'
     | '/orders'
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/alerts'
+    | '/analysis'
     | '/broker'
     | '/history'
     | '/orders'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/auth'
     | '/_app/alerts'
+    | '/_app/analysis'
     | '/_app/broker'
     | '/_app/history'
     | '/_app/orders'
@@ -262,6 +274,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBrokerRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/analysis': {
+      id: '/_app/analysis'
+      path: '/analysis'
+      fullPath: '/analysis'
+      preLoaderRoute: typeof AppAnalysisRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/alerts': {
       id: '/_app/alerts'
       path: '/alerts'
@@ -281,6 +300,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAlertsRoute: typeof AppAlertsRoute
+  AppAnalysisRoute: typeof AppAnalysisRoute
   AppBrokerRoute: typeof AppBrokerRoute
   AppHistoryRoute: typeof AppHistoryRoute
   AppOrdersRoute: typeof AppOrdersRoute
@@ -295,6 +315,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAlertsRoute: AppAlertsRoute,
+  AppAnalysisRoute: AppAnalysisRoute,
   AppBrokerRoute: AppBrokerRoute,
   AppHistoryRoute: AppHistoryRoute,
   AppOrdersRoute: AppOrdersRoute,
