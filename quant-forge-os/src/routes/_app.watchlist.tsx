@@ -190,14 +190,17 @@ function WatchlistPage() {
               >
                 {watchlist.name}
               </button>
-              {watchlists.length > 1 && (
-                <button
-                  onClick={() => deleteWatchlistMutation.mutate(watchlist.id)}
-                  className={`px-2 h-8 rounded-r-lg text-xs hairline border-l-0 hover:bg-red-500/20 hover:text-red-400 transition ${currentWatchlistId === watchlist.id ? "bg-primary/15" : "bg-surface-1"}`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (window.confirm(`Delete watchlist "${watchlist.name}"?`)) {
+                    deleteWatchlistMutation.mutate(watchlist.id);
+                  }
+                }}
+                className={`px-2 h-8 rounded-r-lg text-xs hairline border-l-0 hover:bg-red-500/20 hover:text-red-400 transition ${currentWatchlistId === watchlist.id ? "bg-primary/15" : "bg-surface-1"}`}
+                title="Delete watchlist"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
             </div>
           ))}
         </div>
