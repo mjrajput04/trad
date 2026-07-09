@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/alerts", label: "Alerts", icon: BellRing },
+  { to: "/alerts", label: "AI Alerts", icon: BellRing },
   { to: "/watchlist", label: "Watchlist", icon: Eye },
   { to: "/scanner", label: "Scanner", icon: Radar },
   { to: "/portfolio", label: "Portfolio", icon: Wallet },

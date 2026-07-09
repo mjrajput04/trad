@@ -14,7 +14,7 @@ import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTrad
 import { fmtMoney } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_app/alerts")({
-  head: () => ({ meta: [{ title: "Alerts · NOVA" }, { name: "description", content: "Live buy alerts with entry / target / stop, powered by the TradeScope engine." }] }),
+  head: () => ({ meta: [{ title: "AI Alerts · NOVA" }, { name: "description", content: "Live AI buy alerts with entry / target / stop, powered by the TradeScope engine." }] }),
   component: Alerts,
 });
 
@@ -139,7 +139,7 @@ function Alerts() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
-            <Bell className="h-5 w-5 text-info" /> Market Alerts
+            <Bell className="h-5 w-5 text-info" /> AI Market Alerts
           </h1>
           <p className="text-sm text-muted-foreground">
             Live buy setups — entry, target and stop for each. Re-scanned every ~10 min.
