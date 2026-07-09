@@ -1,12 +1,13 @@
-import { Plug2, LogOut, ShieldCheck } from "lucide-react";
+import { Plug2, LogOut, ShieldCheck, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { LiveDot } from "./Delta";
 import { SymbolSearch } from "./SymbolSearch";
 import { useAuth } from "@/lib/auth-context";
 import { useTrading } from "@/lib/trading-context";
-import { getAuthStatus, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { getAuthStatus, ensureSession, tickle, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,15 +19,39 @@ import {
 
 export function Topbar() {
   const [now, setNow] = useState<Date | null>(null);
+  const [reviving, setReviving] = useState(false);
   const { user, signOut } = useAuth();
   const { isPaper } = useTrading();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   const { data: authStatus } = useQuery({
     queryKey: ["ibkr-auth"],
     queryFn: getAuthStatus,
     refetchInterval: 30_000,
   });
+
+  // Red badge click: first try to REVIVE the shared server-side gateway session
+  // (ssodh/init + reauthenticate) — very often that's enough and nobody has to
+  // do a full IBKR login. Only if that fails do we open the gateway login page.
+  const reviveOrLogin = async () => {
+    if (reviving) return;
+    setReviving(true);
+    try {
+      await tickle().catch(() => {});
+      await ensureSession(true);
+      const st = await getAuthStatus();
+      if (st.authenticated) {
+        toast.success("IBKR session reconnected — no login needed");
+        qc.invalidateQueries();
+        return;
+      }
+      toast.info("Session expired — one person must log in to IBKR (opening login page)");
+      window.open(GATEWAY_LOGIN_URL, "_blank", "noopener");
+    } finally {
+      setReviving(false);
+    }
+  };
   useEffect(() => {
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -76,16 +101,17 @@ export function Topbar() {
         <button
           onClick={() => {
             if (ibkrOk) navigate({ to: "/broker" });
-            else window.open(GATEWAY_LOGIN_URL, "_blank", "noopener");
+            else reviveOrLogin();
           }}
-          title={ibkrOk ? "IBKR session active — open broker page" : "Click to log in to the IBKR gateway"}
-          className={`hidden md:inline-flex items-center gap-2 rounded-lg hairline px-3 h-9 text-xs transition ${
+          disabled={reviving}
+          title={ibkrOk ? "IBKR session active — open broker page" : "Click to reconnect (auto-tries revive first, login only if needed)"}
+          className={`hidden md:inline-flex items-center gap-2 rounded-lg hairline px-3 h-9 text-xs transition disabled:opacity-60 ${
           ibkrOk
             ? 'bg-[oklch(0.78_0.18_152/0.12)] text-bull hover:bg-[oklch(0.78_0.18_152/0.18)]'
             : 'bg-[oklch(0.66_0.22_22/0.12)] text-bear hover:bg-[oklch(0.66_0.22_22/0.18)]'
         }`}>
-          <Plug2 className="h-3.5 w-3.5" />
-          <span>{ibkrOk ? 'IBKR Connected' : 'IBKR Login'}</span>
+          {reviving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug2 className="h-3.5 w-3.5" />}
+          <span>{ibkrOk ? 'IBKR Connected' : reviving ? 'Reconnecting…' : 'IBKR Reconnect'}</span>
           <LiveDot />
         </button>
 
