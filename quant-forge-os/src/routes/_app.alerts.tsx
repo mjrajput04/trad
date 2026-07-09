@@ -9,7 +9,7 @@ import {
   getTsAlerts, getTsQuotes, getTsBacktest, bracketStop,
   type TsAlert, type TsQuote, type TsBacktest,
 } from "@/lib/api/alerts";
-import { getPositions } from "@/lib/api/ibkr";
+import { getPositions, getQuotes } from "@/lib/api/ibkr";
 import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTradeModal";
 import { fmtMoney } from "@/lib/market-data";
 
@@ -84,6 +84,15 @@ function Alerts() {
 
   const quoteBySym = new Map((quotesData?.quotes ?? []).map((q) => [q.symbol, q]));
   const nowPrice = (sym: string) => quoteBySym.get(sym)?.price;
+
+  // Inverse-ETF quotes come from IBKR (the TradeScope feed doesn't carry them).
+  const { data: etfQuotes = [] } = useQuery({
+    queryKey: ["inverse-etf-quotes"],
+    queryFn: () => getQuotes(INVERSE_ETFS.map((e) => e.symbol)),
+    refetchInterval: 5_000,
+    retry: false,
+  });
+  const etfBySym = new Map(etfQuotes.map((q) => [q.symbol, q]));
 
   const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
   const indices = (quotesData?.quotes ?? []).filter((q) => INDEX_SYMS.includes(q.symbol));
@@ -170,27 +179,43 @@ function Alerts() {
             />
           )}
 
-          {/* ---- Downside plays when the market is red ---- */}
-          {marketDown && (
-            <section className="rounded-2xl glass p-5 border border-bear/20">
-              <div className="flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-bear" />
-                <h2 className="text-sm font-semibold">Market is down {indexAvg.toFixed(2)}% — downside plays</h2>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1 mb-3">
-                Inverse ETFs go UP when the market falls. Buying one is a bearish bet — all IBKR-tradable.
-                Higher multiples (3x) move faster and are riskier.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {INVERSE_ETFS.map((e) => {
-                  const p = nowPrice(e.symbol);
+          {/* ---- Short-side plays (inverse ETFs) — always available ---- */}
+          <section className={`rounded-2xl glass p-5 ${marketDown ? "border border-bear/30" : ""}`}>
+            <div className="flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-bear" />
+              <h2 className="text-sm font-semibold">
+                {marketDown
+                  ? `Market is down ${indexAvg.toFixed(2)}% — SHORT plays active`
+                  : "Short-side plays — inverse ETFs"}
+              </h2>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1 mb-3">
+              These go UP when the market falls — buying one = betting the market DOWN (all IBKR-tradable).
+              <span className="text-bull"> Green ↑ = the play is working right now.</span> 3x versions move faster and are riskier.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {[...INVERSE_ETFS]
+                .sort((a, b) => (etfBySym.get(b.symbol)?.changePct ?? -99) - (etfBySym.get(a.symbol)?.changePct ?? -99))
+                .map((e) => {
+                  const q = etfBySym.get(e.symbol);
+                  const p = q?.last || nowPrice(e.symbol);
+                  const chg = q?.changePct;
+                  const active = (chg ?? 0) >= 0.2;
                   const owned = ownedBySym.get(e.symbol) ?? 0;
                   return (
-                    <div key={e.symbol} className="rounded-xl hairline bg-surface-1 p-3 flex items-center justify-between gap-2">
+                    <div key={e.symbol} className={`rounded-xl hairline p-3 flex items-center justify-between gap-2 ${active ? "bg-bull/5 border border-bull/25" : "bg-surface-1"}`}>
                       <div className="min-w-0">
-                        <div className="font-semibold text-sm">{e.symbol}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-sm">{e.symbol}</span>
+                          {active && <span className="rounded bg-bull/15 text-bull text-[9px] font-bold px-1.5 py-0.5">ACTIVE</span>}
+                        </div>
                         <div className="text-[10px] text-muted-foreground truncate">{e.name}</div>
-                        {p != null && <div className="text-[11px] num text-muted-foreground">{money(p)}</div>}
+                        <div className="text-[11px] num">
+                          {p ? money(p) : "—"}
+                          {chg != null && (
+                            <span className={`ml-1.5 ${chg >= 0 ? "text-bull" : "text-bear"}`}>{pct(chg)}</span>
+                          )}
+                        </div>
                       </div>
                       <div className="shrink-0 flex gap-1.5">
                         <button
@@ -204,16 +229,15 @@ function Alerts() {
                             onClick={() => openSell(e.symbol)}
                             className="h-8 px-3 rounded-lg bg-bear/90 hover:bg-bear text-background text-xs font-bold inline-flex items-center gap-1 transition"
                           >
-                            <ArrowDownRight className="h-3.5 w-3.5" /> Sell
+                            <ArrowDownRight className="h-3.5 w-3.5" /> Sell {owned}
                           </button>
                         )}
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            </section>
-          )}
+            </div>
+          </section>
 
           {/* ---- Buy Alerts ---- */}
           <section>

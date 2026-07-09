@@ -13,6 +13,16 @@ export const Route = createFileRoute("/_app/orders")({
 
 const TABS = ["Working", "Filled", "Canceled", "Rejected"] as const;
 
+// What an order actually IS in plain terms: a SELL stop protects a long (stop
+// loss), a SELL limit books profit (take profit), TRAIL = trailing stop, etc.
+function orderRole(o: { type?: string; side?: string }): { label: string; cls: string } | null {
+  const t = (o.type ?? "").toUpperCase();
+  if (t.includes("TRAIL")) return { label: "TRAILING SL", cls: "text-bear" };
+  if (t.includes("STOP") || t === "STP") return { label: "STOP LOSS", cls: "text-bear" };
+  if ((t.includes("LIMIT") || t === "LMT") && o.side === "SELL") return { label: "TAKE PROFIT", cls: "text-bull" };
+  return null;
+}
+
 function Orders() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Working");
   const qc = useQueryClient();
@@ -74,7 +84,10 @@ function Orders() {
               <div className="col-span-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${o.side === "BUY" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{o.side}</span>
               </div>
-              <div className="col-span-1 text-xs text-muted-foreground">{o.type}</div>
+              <div className="col-span-1">
+                <div className="text-xs text-muted-foreground">{o.type}</div>
+                {(() => { const r = orderRole(o); return r ? <div className={`text-[9px] font-bold tracking-wide ${r.cls}`}>{r.label}</div> : null; })()}
+              </div>
               <div className="col-span-1 text-right num text-sm">{o.quantity}</div>
               <div className="col-span-2 text-right num text-sm">{o.price > 0 ? `$${fmtMoney(o.price)}` : "MKT"}</div>
               <div className="col-span-2 text-right num text-sm text-muted-foreground">{o.price > 0 ? `$${fmtMoney(o.price * o.quantity)}` : "—"}</div>

@@ -469,7 +469,8 @@ export async function getOrders() {
     type: o.orderType,
     quantity: parseIBKRNum(o.totalSize),
     filled: parseIBKRNum(o.filledQuantity),
-    price: parseIBKRNum(o.price ?? o.auxPrice ?? o.avgPrice),
+    // Stop orders keep their trigger in auxPrice/stop_price, not price.
+    price: parseIBKRNum(o.price ?? o.auxPrice ?? o.stop_price ?? o.stopPrice ?? o.avgPrice),
     status: mapStatus(o.status),
     rawStatus: o.status,
     time: new Date(o.lastExecutionTime_r ?? Date.now()).toLocaleTimeString(
