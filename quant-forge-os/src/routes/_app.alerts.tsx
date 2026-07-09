@@ -98,21 +98,21 @@ function Alerts() {
   const valid = (a?: TsAlert | null): a is TsAlert =>
     !!a && !!a.symbol && Number(a.entry) > 0 && Number.isFinite(Number(a.score));
 
-  // QUALITY GATE: never suggest a setup that is already failing. If the live
-  // price has slid more than a third of the way from entry toward the stop,
-  // buying it now is chasing a loser — hide it. Better 2 working setups than 5
-  // padded ones. (No live quote yet → keep; it gets re-checked every second.)
+  // QUALITY GATE (silent): a setup only ever appears while it is WORKING —
+  // live price at/above entry, or at most a hair below (<15% of the way to the
+  // stop). Anything already sliding never shows up at all; no "hidden" notice,
+  // no padding to a fixed count. Re-checked every second.
   const working = (a: TsAlert): boolean => {
     const now = nowPrice(a.symbol);
     if (now == null || now <= 0) return true;
     if (now >= a.entry) return true; // at/above entry — heading to target
     const span = a.entry - a.stop;
     if (span <= 0) return true;
-    return (a.entry - now) / span < 0.34;
+    return (a.entry - now) / span < 0.15;
   };
 
-  const validAlerts = (data?.alerts ?? []).filter(valid);
-  const alerts = validAlerts
+  const alerts = (data?.alerts ?? [])
+    .filter(valid)
     .filter(working)
     // Strongest first: in-profit distance toward target, then score.
     .sort((x, y) => {
@@ -120,7 +120,6 @@ function Alerts() {
       const py = ((nowPrice(y.symbol) ?? y.entry) - y.entry) / y.entry;
       return py - px || y.score - x.score;
     });
-  const hiddenCount = validAlerts.length - alerts.length;
   const closed = data?.closed ?? [];
   const rawBest = data?.bestTrade;
   // Best Trade must pass the same gate; otherwise promote the top working alert.
@@ -220,16 +219,11 @@ function Alerts() {
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold">Buy Alerts</h2>
-              <span className="text-[11px] text-muted-foreground">
-                {alerts.length} working
-                {hiddenCount > 0 && <span className="text-warn"> · {hiddenCount} hidden (slid toward stop)</span>}
-              </span>
+              <span className="text-[11px] text-muted-foreground">{alerts.length} working</span>
             </div>
             {alerts.length === 0 ? (
               <div className="rounded-2xl glass p-8 text-center text-muted-foreground text-sm">
-                {hiddenCount > 0
-                  ? `${hiddenCount} setup${hiddenCount > 1 ? "s" : ""} exist but all have slid toward their stop — not worth buying. Waiting for fresh ones.`
-                  : "No setups meet the strict standard right now. Quality over quantity — check back soon."}
+                No strong setups right now. Quality over quantity — new ones appear as soon as they qualify.
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
