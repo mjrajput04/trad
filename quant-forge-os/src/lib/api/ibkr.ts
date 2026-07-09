@@ -519,15 +519,21 @@ export interface PlaceOrderParams {
   orderType: "MKT" | "LMT" | "STP";
   /** Limit price (LMT) or stop trigger price (STP). */
   price?: number;
-  /** Optional bracket: stop-loss trigger for the opposite side. */
+  /** Optional bracket: fixed stop-loss trigger for the opposite side. */
   stopLoss?: number;
+  /**
+   * Optional bracket: TRAILING stop-loss as a percent. The stop follows the
+   * price as it moves in your favor (locking in profit) and only triggers on a
+   * pullback of this size. Takes precedence over the fixed stopLoss.
+   */
+  trailingStopPct?: number;
   /** Optional bracket: take-profit limit for the opposite side. */
   takeProfit?: number;
   tif?: "DAY" | "GTC";
 }
 
 export async function placeOrder(params: PlaceOrderParams) {
-  const { symbol, side, quantity, orderType, price, stopLoss, takeProfit } = params;
+  const { symbol, side, quantity, orderType, price, stopLoss, trailingStopPct, takeProfit } = params;
   if (!quantity || quantity <= 0) throw new Error("Quantity must be positive");
   if ((orderType === "LMT" || orderType === "STP") && !price) {
     throw new Error(`${orderType} orders need a price`);
@@ -555,7 +561,21 @@ export async function placeOrder(params: PlaceOrderParams) {
 
   // Bracket children reference the parent via parentId=cOID so they activate
   // only when the parent fills and cancel each other (OCA) at IBKR.
-  if (stopLoss) {
+  if (trailingStopPct && trailingStopPct > 0) {
+    // Trailing stop: follows the price by trailingStopPct% as it moves in the
+    // position's favor, so profit gets locked in instead of round-tripping.
+    orders.push({
+      acctId: CURRENT_ACCOUNT,
+      conid,
+      parentId: cOID,
+      orderType: "TRAIL",
+      side: closeSide,
+      quantity,
+      trailingAmt: trailingStopPct,
+      trailingType: "%",
+      tif: "GTC",
+    });
+  } else if (stopLoss) {
     orders.push({
       acctId: CURRENT_ACCOUNT,
       conid,

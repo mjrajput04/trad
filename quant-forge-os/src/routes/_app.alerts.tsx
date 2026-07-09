@@ -1,13 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   AlertTriangle, Loader2, Trophy, Bell, Newspaper, Activity,
-  ArrowUpRight, Gauge, Clock, TrendingUp, TrendingDown,
+  ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingUp, TrendingDown,
 } from "lucide-react";
 import {
   getTsAlerts, getTsQuotes, getTsBacktest, bracketStop,
   type TsAlert, type TsQuote, type TsBacktest,
 } from "@/lib/api/alerts";
+import { getPositions } from "@/lib/api/ibkr";
+import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTradeModal";
 import { fmtMoney } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_app/alerts")({
@@ -64,6 +67,21 @@ function Alerts() {
     refetchInterval: 300_000,
   });
 
+  // Your live IBKR holdings — drives the Sell button + owned-qty prefill.
+  const { data: positions = [] } = useQuery({
+    queryKey: ["ibkr-positions"],
+    queryFn: getPositions,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const ownedBySym = new Map(positions.filter((p) => p.quantity > 0).map((p) => [p.symbol, p.quantity]));
+
+  // Quick-trade popup state (Buy/Sell straight from an alert card).
+  const [trade, setTrade] = useState<{ symbol: string; side: "BUY" | "SELL"; defaults?: QuickTradeDefaults } | null>(null);
+  const openBuy = (a: TsAlert) =>
+    setTrade({ symbol: a.symbol, side: "BUY", defaults: { price: a.entry, stop: bracketStop(a) || undefined, takeProfit: a.target } });
+  const openSell = (sym: string) => setTrade({ symbol: sym, side: "SELL" });
+
   const quoteBySym = new Map((quotesData?.quotes ?? []).map((q) => [q.symbol, q]));
   const nowPrice = (sym: string) => quoteBySym.get(sym)?.price;
 
@@ -119,7 +137,15 @@ function Alerts() {
       ) : (
         <>
           {/* ---- Best Trade (only when valid) ---- */}
-          {bestTrade && <BestTrade a={bestTrade} now={nowPrice(bestTrade.symbol)} />}
+          {bestTrade && (
+            <BestTrade
+              a={bestTrade}
+              now={nowPrice(bestTrade.symbol)}
+              owned={ownedBySym.get(bestTrade.symbol) ?? 0}
+              onBuy={() => openBuy(bestTrade)}
+              onSell={() => openSell(bestTrade.symbol)}
+            />
+          )}
 
           {/* ---- Downside plays when the market is red ---- */}
           {marketDown && (
@@ -135,6 +161,7 @@ function Alerts() {
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {INVERSE_ETFS.map((e) => {
                   const p = nowPrice(e.symbol);
+                  const owned = ownedBySym.get(e.symbol) ?? 0;
                   return (
                     <div key={e.symbol} className="rounded-xl hairline bg-surface-1 p-3 flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -142,13 +169,22 @@ function Alerts() {
                         <div className="text-[10px] text-muted-foreground truncate">{e.name}</div>
                         {p != null && <div className="text-[11px] num text-muted-foreground">{money(p)}</div>}
                       </div>
-                      <Link
-                        to="/broker"
-                        search={{ symbol: e.symbol, side: "BUY", type: "MKT" }}
-                        className="shrink-0 h-8 px-3 rounded-lg bg-bear/90 hover:bg-bear text-background text-xs font-bold inline-flex items-center gap-1 transition"
-                      >
-                        <ArrowUpRight className="h-3.5 w-3.5" /> Buy
-                      </Link>
+                      <div className="shrink-0 flex gap-1.5">
+                        <button
+                          onClick={() => setTrade({ symbol: e.symbol, side: "BUY", defaults: p ? { price: p } : undefined })}
+                          className="h-8 px-3 rounded-lg bg-bull/90 hover:bg-bull text-background text-xs font-bold inline-flex items-center gap-1 transition"
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" /> Buy
+                        </button>
+                        {owned > 0 && (
+                          <button
+                            onClick={() => openSell(e.symbol)}
+                            className="h-8 px-3 rounded-lg bg-bear/90 hover:bg-bear text-background text-xs font-bold inline-flex items-center gap-1 transition"
+                          >
+                            <ArrowDownRight className="h-3.5 w-3.5" /> Sell
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -169,7 +205,14 @@ function Alerts() {
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {alerts.map((a) => (
-                  <AlertCard key={a.id} a={a} now={nowPrice(a.symbol)} />
+                  <AlertCard
+                    key={a.id}
+                    a={a}
+                    now={nowPrice(a.symbol)}
+                    owned={ownedBySym.get(a.symbol) ?? 0}
+                    onBuy={() => openBuy(a)}
+                    onSell={() => openSell(a.symbol)}
+                  />
                 ))}
               </div>
             )}
@@ -209,23 +252,52 @@ function Alerts() {
           {backtest && <RealityCheck b={backtest} stats={data?.stats} closed={data?.closed ?? []} />}
         </>
       )}
+
+      {trade && (
+        <QuickTradeModal
+          symbol={trade.symbol}
+          side={trade.side}
+          ownedQty={ownedBySym.get(trade.symbol) ?? 0}
+          defaults={trade.defaults}
+          onClose={() => setTrade(null)}
+        />
+      )}
     </div>
   );
 }
 
-function tradeSearch(a: TsAlert) {
-  const sl = bracketStop(a);
-  return {
-    symbol: a.symbol,
-    side: "BUY" as const,
-    type: "LMT" as const,
-    price: a.entry,
-    tp: a.target,
-    stop: sl > 0 ? sl : undefined,
-  };
+// Shared Buy / (Sell when holding) button pair for the alert cards.
+function TradeButtons({ owned, onBuy, onSell, tall }: { owned: number; onBuy: () => void; onSell: () => void; tall?: boolean }) {
+  const h = tall ? "h-10" : "h-9";
+  return (
+    <div className="flex gap-2 mt-auto">
+      <button
+        onClick={onBuy}
+        className={`flex-1 ${h} rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition`}
+      >
+        <ArrowUpRight className="h-4 w-4" /> Buy
+      </button>
+      {owned > 0 && (
+        <button
+          onClick={onSell}
+          className={`flex-1 ${h} rounded-lg bg-bear glow-bear text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition`}
+        >
+          <ArrowDownRight className="h-4 w-4" /> Sell {owned}
+        </button>
+      )}
+    </div>
+  );
 }
 
-function BestTrade({ a, now }: { a: TsAlert; now?: number }) {
+interface TradeCardProps {
+  a: TsAlert;
+  now?: number;
+  owned: number;
+  onBuy: () => void;
+  onSell: () => void;
+}
+
+function BestTrade({ a, now, owned, onBuy, onSell }: TradeCardProps) {
   return (
     <div className="rounded-2xl glass p-5 relative overflow-hidden">
       <div className="absolute -top-16 -right-10 h-48 w-48 rounded-full bg-bull/10 blur-3xl" />
@@ -264,17 +336,14 @@ function BestTrade({ a, now }: { a: TsAlert; now?: number }) {
             <Level label="Stop" value={a.stop} sub={pct(a.stopPct)} tone="bear" />
           </div>
           <LevelBar entry={a.entry} target={a.target} stop={a.stop} now={now} />
-          <Link to="/broker" search={tradeSearch(a)}
-            className="h-10 rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-2 hover:opacity-90 transition">
-            <ArrowUpRight className="h-4 w-4" /> Trade this
-          </Link>
+          <TradeButtons owned={owned} onBuy={onBuy} onSell={onSell} tall />
         </div>
       </div>
     </div>
   );
 }
 
-function AlertCard({ a, now }: { a: TsAlert; now?: number }) {
+function AlertCard({ a, now, owned, onBuy, onSell }: TradeCardProps) {
   return (
     <div className="rounded-2xl glass p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -313,10 +382,7 @@ function AlertCard({ a, now }: { a: TsAlert; now?: number }) {
         </div>
       )}
 
-      <Link to="/broker" search={tradeSearch(a)}
-        className="mt-auto h-9 rounded-lg bg-bull/90 hover:bg-bull text-background text-xs font-bold inline-flex items-center justify-center gap-1.5 transition">
-        <ArrowUpRight className="h-3.5 w-3.5" /> Trade this
-      </Link>
+      <TradeButtons owned={owned} onBuy={onBuy} onSell={onSell} />
     </div>
   );
 }
