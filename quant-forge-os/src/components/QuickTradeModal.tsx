@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, X, Zap } from "lucide-react";
-import { getAccountSummary, getQuotes, placeOrder } from "@/lib/api/ibkr";
+import { cancelWorkingOrders, getAccountSummary, getQuotes, placeOrder } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
@@ -84,11 +84,16 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
   }, [now, summary, side, ownedQty, defaults, qty, trailPct, price]);
 
   const order = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!qty || qty <= 0) throw new Error("Enter a valid quantity");
       if (type === "LMT" && (!price || price <= 0)) throw new Error("Limit orders need a price");
       if (slMode === "trail" && (!trailPct || trailPct <= 0)) throw new Error("Enter a trailing %");
       if (slMode === "fixed" && (!fixedStop || fixedStop <= 0)) throw new Error("Enter a stop price");
+      // Selling out of a position? First cancel its leftover bracket orders
+      // (GTC stop/target) — otherwise they fire later and flip you short.
+      if (side === "SELL" && ownedQty > 0) {
+        await cancelWorkingOrders({ symbol }).catch(() => {});
+      }
       return placeOrder({
         symbol,
         side,

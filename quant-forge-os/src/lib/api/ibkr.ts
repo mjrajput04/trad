@@ -463,6 +463,7 @@ export async function getOrders() {
   const data = await ibkr<{ orders: any[] }>("/iserver/account/orders");
   return (data?.orders ?? []).map((o) => ({
     orderId: o.orderId,
+    conid: Number(o.conid) || 0,
     symbol: o.ticker ?? o.symbol,
     side: o.side === "B" || o.side === "BUY" ? "BUY" : "SELL",
     type: o.orderType,
@@ -606,8 +607,36 @@ export async function placeOrder(params: PlaceOrderParams) {
 }
 
 /** Close an open position with a market order on the opposite side. */
+/**
+ * Cancel every WORKING order that matches the symbol and/or conid. Crucial
+ * before manually closing a position: leftover GTC bracket children (stop /
+ * take-profit) stay live at IBKR after the position is flat and would execute
+ * later — flipping you into an unintended short.
+ */
+export async function cancelWorkingOrders(filter: { symbol?: string; conid?: number }) {
+  const orders = await getOrders().catch(() => []);
+  const targets = orders.filter(
+    (o) =>
+      o.status === "Working" &&
+      ((filter.conid && o.conid === filter.conid) ||
+        (filter.symbol && o.symbol?.toUpperCase() === filter.symbol.toUpperCase()))
+  );
+  let cancelled = 0;
+  for (const o of targets) {
+    try {
+      await cancelOrder(String(o.orderId));
+      cancelled++;
+    } catch {
+      /* keep going — closing the position matters more */
+    }
+  }
+  return cancelled;
+}
+
 export async function closePosition(conid: number, quantity: number) {
   if (!quantity) throw new Error("Nothing to close");
+  // Kill any working orders on this contract first (see cancelWorkingOrders).
+  await cancelWorkingOrders({ conid }).catch(() => {});
   const result = await submitOrders([
     {
       acctId: CURRENT_ACCOUNT,
