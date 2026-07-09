@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -206,7 +206,9 @@ function Alerts() {
                     <div key={e.symbol} className={`rounded-xl hairline p-3 flex items-center justify-between gap-2 ${active ? "bg-bull/5 border border-bull/25" : "bg-surface-1"}`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-sm">{e.symbol}</span>
+                          <Link to="/stock/$symbol" params={{ symbol: e.symbol }} className="font-semibold text-sm hover:text-primary transition" title="Open chart">
+                            {e.symbol}
+                          </Link>
                           {active && <span className="rounded bg-bull/15 text-bull text-[9px] font-bold px-1.5 py-0.5">ACTIVE</span>}
                         </div>
                         <div className="text-[10px] text-muted-foreground truncate">{e.name}</div>
@@ -280,7 +282,13 @@ function Alerts() {
               <div className="text-sm font-semibold mb-3 flex items-center gap-2"><Gauge className="h-4 w-4 text-violet" /> Market Mood</div>
               <div className="space-y-2">
                 {indices.map((q) => (
-                  <div key={q.symbol} className="flex items-center justify-between rounded-lg hairline bg-surface-1 px-3 py-2">
+                  <Link
+                    key={q.symbol}
+                    to="/stock/$symbol"
+                    params={{ symbol: q.symbol }}
+                    title="Open chart"
+                    className="flex items-center justify-between rounded-lg hairline bg-surface-1 px-3 py-2 transition hover:ring-1 hover:ring-primary/40"
+                  >
                     <div className="text-xs">
                       <div className="font-semibold">{q.symbol}</div>
                       <div className="text-[10px] text-muted-foreground">{(q.name ?? q.symbol ?? "").replace(/ · .*/, "")}</div>
@@ -289,7 +297,7 @@ function Alerts() {
                       <div className="text-sm font-semibold">{money(q.price)}</div>
                       <div className={`text-[11px] ${q.changePct >= 0 ? "text-bull" : "text-bear"}`}>{pct(q.changePct)}</div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -355,7 +363,9 @@ function BestTrade({ a, now, owned, onBuy, onSell }: TradeCardProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold">{a.symbol}</span>
+            <Link to="/stock/$symbol" params={{ symbol: a.symbol }} className="text-2xl font-bold hover:text-primary transition" title="Open chart">
+              {a.symbol}
+            </Link>
             <span className="rounded-md bg-primary/15 text-primary text-[11px] font-bold px-2 py-0.5">Score {Math.round(a.score)}</span>
             <span className="text-[11px] text-muted-foreground">{a.timeframe}</span>
             {now != null && <span className="text-sm num text-muted-foreground">Now {money(now)}</span>}
@@ -395,7 +405,9 @@ function AlertCard({ a, now, owned, onBuy, onSell }: TradeCardProps) {
     <div className="rounded-2xl glass p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-lg font-bold">{a.symbol}</span>
+          <Link to="/stock/$symbol" params={{ symbol: a.symbol }} className="text-lg font-bold hover:text-primary transition" title="Open chart">
+            {a.symbol}
+          </Link>
           <span className="text-[10px] text-muted-foreground">{a.timeframe}</span>
         </div>
         <span className="rounded-md bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5">Score {Math.round(a.score)}</span>
@@ -490,14 +502,19 @@ function LevelBar({ entry, target, stop, now }: { entry: number; target: number;
 function QuoteTile({ q }: { q: TsQuote }) {
   const up = q.changePct >= 0;
   return (
-    <div className={`rounded-lg hairline p-2.5 ${up ? "bg-bull/5" : "bg-bear/5"}`}>
+    <Link
+      to="/stock/$symbol"
+      params={{ symbol: q.symbol }}
+      title="Open chart"
+      className={`block rounded-lg hairline p-2.5 transition hover:ring-1 hover:ring-primary/40 ${up ? "bg-bull/5" : "bg-bear/5"}`}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold">{q.symbol}</span>
         {up ? <TrendingUp className="h-3 w-3 text-bull" /> : <TrendingDown className="h-3 w-3 text-bear" />}
       </div>
       <div className="text-sm font-semibold num mt-0.5">{money(q.price)}</div>
       <div className={`text-[10px] num ${up ? "text-bull" : "text-bear"}`}>{pct(q.changePct)}</div>
-    </div>
+    </Link>
   );
 }
 
