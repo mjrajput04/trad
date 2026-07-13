@@ -20,6 +20,7 @@ import { Route as AppPortfolioRouteImport } from './routes/_app.portfolio'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppOptionsRouteImport } from './routes/_app.options'
 import { Route as AppHistoryRouteImport } from './routes/_app.history'
+import { Route as AppFnoAlertsRouteImport } from './routes/_app.fno-alerts'
 import { Route as AppBrokerRouteImport } from './routes/_app.broker'
 import { Route as AppAnalysisRouteImport } from './routes/_app.analysis'
 import { Route as AppAlertsRouteImport } from './routes/_app.alerts'
@@ -79,6 +80,11 @@ const AppHistoryRoute = AppHistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFnoAlertsRoute = AppFnoAlertsRouteImport.update({
+  id: '/fno-alerts',
+  path: '/fno-alerts',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrokerRoute = AppBrokerRouteImport.update({
   id: '/broker',
   path: '/broker',
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AppAlertsRoute
   '/analysis': typeof AppAnalysisRoute
   '/broker': typeof AppBrokerRoute
+  '/fno-alerts': typeof AppFnoAlertsRoute
   '/history': typeof AppHistoryRoute
   '/options': typeof AppOptionsRoute
   '/orders': typeof AppOrdersRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/alerts': typeof AppAlertsRoute
   '/analysis': typeof AppAnalysisRoute
   '/broker': typeof AppBrokerRoute
+  '/fno-alerts': typeof AppFnoAlertsRoute
   '/history': typeof AppHistoryRoute
   '/options': typeof AppOptionsRoute
   '/orders': typeof AppOrdersRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/analysis': typeof AppAnalysisRoute
   '/_app/broker': typeof AppBrokerRoute
+  '/_app/fno-alerts': typeof AppFnoAlertsRoute
   '/_app/history': typeof AppHistoryRoute
   '/_app/options': typeof AppOptionsRoute
   '/_app/orders': typeof AppOrdersRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/analysis'
     | '/broker'
+    | '/fno-alerts'
     | '/history'
     | '/options'
     | '/orders'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/analysis'
     | '/broker'
+    | '/fno-alerts'
     | '/history'
     | '/options'
     | '/orders'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/_app/alerts'
     | '/_app/analysis'
     | '/_app/broker'
+    | '/_app/fno-alerts'
     | '/_app/history'
     | '/_app/options'
     | '/_app/orders'
@@ -286,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHistoryRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/fno-alerts': {
+      id: '/_app/fno-alerts'
+      path: '/fno-alerts'
+      fullPath: '/fno-alerts'
+      preLoaderRoute: typeof AppFnoAlertsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/broker': {
       id: '/_app/broker'
       path: '/broker'
@@ -321,6 +340,7 @@ interface AppRouteChildren {
   AppAlertsRoute: typeof AppAlertsRoute
   AppAnalysisRoute: typeof AppAnalysisRoute
   AppBrokerRoute: typeof AppBrokerRoute
+  AppFnoAlertsRoute: typeof AppFnoAlertsRoute
   AppHistoryRoute: typeof AppHistoryRoute
   AppOptionsRoute: typeof AppOptionsRoute
   AppOrdersRoute: typeof AppOrdersRoute
@@ -337,6 +357,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAlertsRoute: AppAlertsRoute,
   AppAnalysisRoute: AppAnalysisRoute,
   AppBrokerRoute: AppBrokerRoute,
+  AppFnoAlertsRoute: AppFnoAlertsRoute,
   AppHistoryRoute: AppHistoryRoute,
   AppOptionsRoute: AppOptionsRoute,
   AppOrdersRoute: AppOrdersRoute,

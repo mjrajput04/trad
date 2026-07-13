@@ -860,9 +860,99 @@ async function optionInfo(
     }));
 }
 
+// Contract ids for a given (underlying, month, strike, right) are stable for the
+// life of the listing, so we cache the resolved conids per (underlying:month).
+// This is what makes the chain SLOW on first open (one /secdef/info round-trip
+// per strike×right) but INSTANT on every re-open — the cache survives reloads.
+const OPTCHAIN_KEY = "nova_optchain_v1";
+const OPTCHAIN_TTL = 12 * 60 * 60 * 1000; // 12h
+type ChainCacheEntry = { ts: number; byStrike: Record<string, OptionContract[]> };
+const optChainMem = new Map<string, ChainCacheEntry>();
+
+function loadOptChain(key: string): ChainCacheEntry | null {
+  const mem = optChainMem.get(key);
+  if (mem) return Date.now() - mem.ts < OPTCHAIN_TTL ? mem : null;
+  if (typeof window === "undefined") return null;
+  try {
+    const all = JSON.parse(localStorage.getItem(OPTCHAIN_KEY) ?? "{}");
+    const e = all[key] as ChainCacheEntry | undefined;
+    if (e && Date.now() - e.ts < OPTCHAIN_TTL) { optChainMem.set(key, e); return e; }
+  } catch { /* corrupt cache — ignore */ }
+  return null;
+}
+
+function saveOptChain(key: string, entry: ChainCacheEntry) {
+  optChainMem.set(key, entry);
+  if (typeof window === "undefined") return;
+  try {
+    const all = JSON.parse(localStorage.getItem(OPTCHAIN_KEY) ?? "{}");
+    all[key] = entry;
+    // keep only the 20 most-recent underlyings so the cache can't grow unbounded
+    const keys = Object.keys(all).sort((a, b) => (all[b]?.ts ?? 0) - (all[a]?.ts ?? 0));
+    const pruned: Record<string, ChainCacheEntry> = {};
+    for (const k of keys.slice(0, 20)) pruned[k] = all[k];
+    localStorage.setItem(OPTCHAIN_KEY, JSON.stringify(pruned));
+  } catch { /* quota — ignore */ }
+}
+
+/** All listed strikes for one option month (one fast round-trip). */
+export async function getOptionStrikes(conid: number, month: string): Promise<number[]> {
+  const st = await ibkr<{ call?: number[]; put?: number[] }>(
+    `/iserver/secdef/strikes?conid=${conid}&sectype=OPT&month=${month}&exchange=SMART`
+  );
+  return (st?.call ?? []).slice().sort((a, b) => a - b);
+}
+
+/** The `span·2+1` strikes nearest `spot` (or the middle of the list if spot=0). */
+export function pickNearestStrikes(all: number[], spot: number, span = 6): number[] {
+  if (!all.length) return [];
+  if (spot <= 0) {
+    const mid = Math.floor(all.length / 2);
+    return all.slice(Math.max(0, mid - span), mid + span + 1);
+  }
+  return [...new Set(
+    [...all].sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot)).slice(0, span * 2 + 1)
+  )].sort((a, b) => a - b);
+}
+
+/**
+ * Resolve call+put contract ids for the requested strikes of one month, using
+ * the per-underlying cache. Only strikes NOT already cached hit the gateway, so
+ * scrolling / re-opening the chain costs nothing. Weekly expiries included.
+ */
+export async function resolveOptionContracts(
+  conid: number,
+  month: string,
+  strikes: number[]
+): Promise<OptionContract[]> {
+  const key = `${conid}:${month}`;
+  const cached = loadOptChain(key);
+  const byStrike: Record<string, OptionContract[]> = { ...(cached?.byStrike ?? {}) };
+  const missing = strikes.filter((k) => !byStrike[String(k)]);
+
+  if (missing.length) {
+    const CHUNK = 6; // parallel round-trips per batch — fast but not a flood
+    for (let i = 0; i < missing.length; i += CHUNK) {
+      const batch = missing.slice(i, i + CHUNK);
+      const results = await Promise.all(
+        batch.flatMap((k) => [
+          optionInfo(conid, month, "C", k).catch(() => [] as OptionContract[]),
+          optionInfo(conid, month, "P", k).catch(() => [] as OptionContract[]),
+        ])
+      );
+      batch.forEach((k, bi) => {
+        byStrike[String(k)] = [...(results[bi * 2] ?? []), ...(results[bi * 2 + 1] ?? [])];
+      });
+    }
+    saveOptChain(key, { ts: Date.now(), byStrike });
+  }
+  return strikes.flatMap((k) => byStrike[String(k)] ?? []);
+}
+
 /**
  * Option chain for one month: the `span·2+1` strikes nearest the spot, with the
  * call+put contract ids for every expiry inside that month (weeklies included).
+ * Cached per underlying so only the first open is slow.
  */
 export async function getOptionChain(
   underlying: number,
@@ -870,27 +960,10 @@ export async function getOptionChain(
   spot: number,
   span = 6
 ): Promise<{ strikes: number[]; contracts: OptionContract[] }> {
-  const st = await ibkr<{ call?: number[]; put?: number[] }>(
-    `/iserver/secdef/strikes?conid=${underlying}&sectype=OPT&month=${month}&exchange=SMART`
-  );
-  const all = st?.call ?? [];
+  const all = await getOptionStrikes(underlying, month);
   if (!all.length) return { strikes: [], contracts: [] };
-  const picked = [...new Set(
-    [...all].sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot)).slice(0, span * 2 + 1)
-  )].sort((a, b) => a - b);
-
-  const contracts: OptionContract[] = [];
-  const CHUNK = 4; // don't hammer the gateway
-  for (let i = 0; i < picked.length; i += CHUNK) {
-    const batch = picked.slice(i, i + CHUNK);
-    const results = await Promise.all(
-      batch.flatMap((k) => [
-        optionInfo(underlying, month, "C", k).catch(() => []),
-        optionInfo(underlying, month, "P", k).catch(() => []),
-      ])
-    );
-    results.forEach((r) => contracts.push(...r));
-  }
+  const picked = pickNearestStrikes(all, spot, span);
+  const contracts = await resolveOptionContracts(underlying, month, picked);
   return { strikes: picked, contracts };
 }
 

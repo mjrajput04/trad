@@ -6,6 +6,7 @@ import {
   Layers,
   ListOrdered,
   BellRing,
+  Sparkles,
   History,
   BarChart3,
   Coins,
@@ -16,7 +17,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/alerts", label: "AI Alerts", icon: BellRing },
+  { to: "/alerts", label: "AI Stock Alerts", icon: BellRing },
+  { to: "/fno-alerts", label: "AI F&O Alerts", icon: Sparkles },
   { to: "/watchlist", label: "Watchlist", icon: Eye },
   { to: "/options", label: "F&O Options", icon: Coins },
   { to: "/scanner", label: "Scanner", icon: Radar },
