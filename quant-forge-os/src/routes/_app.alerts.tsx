@@ -98,14 +98,16 @@ function Alerts() {
   // Same silent quality-gate as buy alerts: a short play only appears while it
   // is genuinely WORKING — the inverse ETF is up ≥0.2% AND above today's open
   // (its index is actually falling). Nothing strong → the whole section hides.
+  // EXCEPTION: an ETF you actually HOLD stays visible until you sell it.
   const strongEtfs = [...INVERSE_ETFS]
-    .map((e) => ({ ...e, q: etfBySym.get(e.symbol) }))
-    .filter((x) => {
-      if (!x.q || !(x.q.last > 0)) return false;
-      const anchor = x.q.open || x.q.prevClose || 0;
-      return (x.q.changePct ?? 0) >= 0.2 && anchor > 0 && x.q.last >= anchor;
+    .map((e) => {
+      const q = etfBySym.get(e.symbol);
+      const anchor = q?.open || q?.prevClose || 0;
+      const strong = !!q && q.last > 0 && (q.changePct ?? 0) >= 0.2 && anchor > 0 && q.last >= anchor;
+      return { ...e, q, strong, owned: ownedBySym.get(e.symbol) ?? 0 };
     })
-    .sort((a, b) => (b.q!.changePct ?? 0) - (a.q!.changePct ?? 0));
+    .filter((x) => x.strong || x.owned > 0)
+    .sort((a, b) => (b.q?.changePct ?? 0) - (a.q?.changePct ?? 0));
 
   const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
   const indices = (quotesData?.quotes ?? []).filter((q) => INDEX_SYMS.includes(q.symbol));
@@ -133,16 +135,35 @@ function Alerts() {
     return (a.entry - now) / span < 0.15;
   };
 
+  // HOLDING override: once you actually own a symbol, its card NEVER hides —
+  // not by the sliding gate, not by target/stop — until the position is sold.
+  const holding = (sym: string) => (ownedBySym.get(sym) ?? 0) > 0;
+
   const alerts = (data?.alerts ?? [])
     .filter(valid)
-    .filter(working)
+    .filter((a) => working(a) || holding(a.symbol))
     // Strongest first: in-profit distance toward target, then score.
     .sort((x, y) => {
       const px = ((nowPrice(x.symbol) ?? x.entry) - x.entry) / x.entry;
       const py = ((nowPrice(y.symbol) ?? y.entry) - y.entry) / y.entry;
       return py - px || y.score - x.score;
     });
-  const closed = data?.closed ?? [];
+
+  // The engine may have CLOSED the alert (target/stop hit) while you still hold
+  // the shares — resurrect the latest closed card per held symbol so the levels
+  // stay on screen until you sell.
+  const liveSyms = new Set(alerts.map((a) => a.symbol));
+  const heldClosed = Object.values(
+    (data?.closed ?? [])
+      .filter(valid)
+      .filter((c) => holding(c.symbol) && !liveSyms.has(c.symbol))
+      .reduce<Record<string, TsAlert>>((acc, c) => {
+        const prev = acc[c.symbol];
+        if (!prev || new Date(c.closedAt ?? 0) > new Date(prev.closedAt ?? 0)) acc[c.symbol] = c;
+        return acc;
+      }, {})
+  );
+
   const rawBest = data?.bestTrade;
   // Best Trade must pass the same gate; otherwise promote the top working alert.
   const bestTrade = valid(rawBest) && working(rawBest) ? rawBest : (alerts[0] ?? null);
@@ -198,7 +219,9 @@ function Alerts() {
             <div className="flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-bear" />
               <h2 className="text-sm font-semibold">
-                Market falling{marketDown ? ` (${indexAvg.toFixed(2)}%)` : ""} — {strongEtfs.length} SHORT play{strongEtfs.length > 1 ? "s" : ""} working
+                {strongEtfs.some((e) => e.strong)
+                  ? <>Market falling{marketDown ? ` (${indexAvg.toFixed(2)}%)` : ""} — {strongEtfs.filter((e) => e.strong).length} SHORT play{strongEtfs.filter((e) => e.strong).length > 1 ? "s" : ""} working</>
+                  : <>Your short-side holdings</>}
               </h2>
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 mb-3">
@@ -211,8 +234,8 @@ function Alerts() {
                   const q = e.q;
                   const now = q?.last || nowPrice(e.symbol) || 0;
                   const chg = q?.changePct;
-                  const active = true;
-                  const owned = ownedBySym.get(e.symbol) ?? 0;
+                  const active = e.strong;
+                  const owned = e.owned;
                   // Play levels anchored to today's open: target +3%, stop -2% —
                   // the same defaults the trade popup suggests.
                   const base = q?.open || q?.prevClose || now;
@@ -227,6 +250,7 @@ function Alerts() {
                             {e.symbol}
                           </Link>
                           {active && <span className="rounded bg-bull/15 text-bull text-[9px] font-bold px-1.5 py-0.5">ACTIVE</span>}
+                          {owned > 0 && <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {owned}</span>}
                         </div>
                         {chg != null && (
                           <span className={`text-xs num font-semibold ${chg >= 0 ? "text-bull" : "text-bear"}`}>{pct(chg)}</span>
@@ -278,15 +302,17 @@ function Alerts() {
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold">Buy Alerts</h2>
-              <span className="text-[11px] text-muted-foreground">{alerts.length} working</span>
+              <span className="text-[11px] text-muted-foreground">
+                {alerts.length} working{heldClosed.length > 0 && <> · {heldClosed.length} holding</>}
+              </span>
             </div>
-            {alerts.length === 0 ? (
+            {alerts.length === 0 && heldClosed.length === 0 ? (
               <div className="rounded-2xl glass p-8 text-center text-muted-foreground text-sm">
                 No strong setups right now. Quality over quantity — new ones appear as soon as they qualify.
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {alerts.map((a) => (
+                {[...alerts, ...heldClosed].map((a) => (
                   <AlertCard
                     key={a.id}
                     a={a}
@@ -400,6 +426,7 @@ function BestTrade({ a, now, owned, onBuy, onSell }: TradeCardProps) {
               {a.symbol}
             </Link>
             <span className="rounded-md bg-primary/15 text-primary text-[11px] font-bold px-2 py-0.5">Score {Math.round(a.score)}</span>
+            {owned > 0 && <span className="rounded-md bg-info/15 text-info text-[11px] font-bold px-2 py-0.5">HOLDING {owned}</span>}
             <span className="text-[11px] text-muted-foreground">{a.timeframe}</span>
             {now != null && <span className="text-sm num text-muted-foreground">Now {money(now)}</span>}
           </div>
@@ -441,6 +468,7 @@ function AlertCard({ a, now, owned, onBuy, onSell }: TradeCardProps) {
           <Link to="/stock/$symbol" params={{ symbol: a.symbol }} className="text-lg font-bold hover:text-primary transition" title="Open chart">
             {a.symbol}
           </Link>
+          {owned > 0 && <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {owned}</span>}
           <span className="text-[10px] text-muted-foreground">{a.timeframe}</span>
         </div>
         <span className="rounded-md bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5">Score {Math.round(a.score)}</span>

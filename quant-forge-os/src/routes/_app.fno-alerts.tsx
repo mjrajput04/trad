@@ -137,6 +137,7 @@ function FnoBest({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
               {s.label}
             </Link>
             {s.score != null && <span className="rounded-md bg-primary/15 text-primary text-[11px] font-bold px-2 py-0.5">Score {Math.round(s.score)}</span>}
+            {s.held && <span className="rounded-md bg-info/15 text-info text-[11px] font-bold px-2 py-0.5">HOLDING</span>}
           </div>
           <div className="mt-2"><Meta s={s} /></div>
           {s.reasons.length > 0 && (
@@ -171,6 +172,7 @@ function FnoCard({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
             {s.label}
           </Link>
           {s.score != null && <span className="rounded-md bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5">Score {Math.round(s.score)}</span>}
+          {s.held && <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING</span>}
         </div>
         {s.iv ? <span className="text-[10px] text-muted-foreground num">IV {s.iv.toFixed(0)}%</span> : null}
       </div>

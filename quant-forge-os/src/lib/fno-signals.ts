@@ -11,7 +11,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getTsAlerts, type TsAlert } from "./api/alerts";
 import {
-  getQuotes, getOptionQuotes, findOptionPlay,
+  getQuotes, getOptionQuotes, findOptionPlay, getPositions,
   type OptionContract, type OptionQuote, type SymbolQuote,
 } from "./api/ibkr";
 
@@ -34,6 +34,7 @@ export interface FnoSignal {
   iv?: number;
   reasons: string[];
   ready: boolean;         // premium known → levels are live
+  held: boolean;          // you hold this exact contract → card never hides
 }
 
 export interface FnoContext {
@@ -49,6 +50,20 @@ export interface FnoContext {
 
 export function useFnoSignals(): FnoContext {
   const { data: ts } = useQuery({ queryKey: ["ts-alerts"], queryFn: getTsAlerts, refetchInterval: 30_000 });
+
+  // Your live IBKR positions — a HELD contract's card never hides until sold.
+  const { data: positions = [] } = useQuery({
+    queryKey: ["ibkr-positions"],
+    queryFn: getPositions,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const heldConids = new Set(positions.filter((p) => p.quantity > 0).map((p) => p.conid));
+  // Underlyings on which you hold OPTIONS — their alerts bypass the sliding
+  // gate so a held call's card can keep resolving/showing.
+  const heldOptUnderlyings = new Set(
+    positions.filter((p) => p.quantity > 0 && p.assetClass === "OPT").map((p) => p.symbol)
+  );
 
   const validAlerts = (ts?.alerts ?? []).filter(
     (a) => a?.symbol && Number(a.entry) > 0 && Number.isFinite(Number(a.score))
@@ -82,7 +97,9 @@ export function useFnoSignals(): FnoContext {
     if (span <= 0) return true;
     return (a.entry - now) / span < 0.15;
   };
-  const workingAlerts = validAlerts.filter(working).slice(0, 6);
+  const workingAlerts = validAlerts
+    .filter((a) => working(a) || heldOptUnderlyings.has(a.symbol))
+    .slice(0, 6);
 
   // Resolve one option contract per working alert (+ SPY put when falling).
   // Cached by React Query key; contract ids don't move so this is cheap.
@@ -136,10 +153,12 @@ export function useFnoSignals(): FnoContext {
       stop = Math.max(0.01, mid - delta * (u.last * 0.01));
     }
     const ready = mid > 0 && target > 0 && stop > 0 && target > stop;
+    const held = heldConids.has(s.contract.conid);
 
     // OPTION-LEVEL GATE: while a premium isn't in yet, keep it visible as
-    // "resolving". Once live, drop it the instant it reaches target or stop.
-    if (ready) {
+    // "resolving". Once live, drop it the instant it reaches target or stop —
+    // UNLESS you hold the contract: then the card stays until you sell.
+    if (ready && !held) {
       const live = q?.last || mid;
       if (live >= target || live <= stop) continue; // played out → hide silently
     }
@@ -155,6 +174,7 @@ export function useFnoSignals(): FnoContext {
       iv: q?.iv,
       reasons: s.alert?.reasons ?? (s.right === "P" ? ["Market falling — bearish index play"] : []),
       ready,
+      held,
     });
   }
 
