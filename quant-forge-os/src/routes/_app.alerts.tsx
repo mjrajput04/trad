@@ -94,6 +94,18 @@ function Alerts() {
   });
   const etfBySym = new Map(etfQuotes.map((q) => [q.symbol, q]));
 
+  // Same silent quality-gate as buy alerts: a short play only appears while it
+  // is genuinely WORKING — the inverse ETF is up ≥0.2% AND above today's open
+  // (its index is actually falling). Nothing strong → the whole section hides.
+  const strongEtfs = [...INVERSE_ETFS]
+    .map((e) => ({ ...e, q: etfBySym.get(e.symbol) }))
+    .filter((x) => {
+      if (!x.q || !(x.q.last > 0)) return false;
+      const anchor = x.q.open || x.q.prevClose || 0;
+      return (x.q.changePct ?? 0) >= 0.2 && anchor > 0 && x.q.last >= anchor;
+    })
+    .sort((a, b) => (b.q!.changePct ?? 0) - (a.q!.changePct ?? 0));
+
   const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
   const indices = (quotesData?.quotes ?? []).filter((q) => INDEX_SYMS.includes(q.symbol));
   const stocks = (quotesData?.quotes ?? []).filter((q) => !INDEX_SYMS.includes(q.symbol));
@@ -179,28 +191,26 @@ function Alerts() {
             />
           )}
 
-          {/* ---- Short-side plays (inverse ETFs) — always available ---- */}
-          <section className={`rounded-2xl glass p-5 ${marketDown ? "border border-bear/30" : ""}`}>
+          {/* ---- Short-side plays — ONLY while genuinely strong, else hidden ---- */}
+          {strongEtfs.length > 0 && (
+          <section className="rounded-2xl glass p-5 border border-bear/30">
             <div className="flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-bear" />
               <h2 className="text-sm font-semibold">
-                {marketDown
-                  ? `Market is down ${indexAvg.toFixed(2)}% — SHORT plays active`
-                  : "Short-side plays — inverse ETFs"}
+                Market falling{marketDown ? ` (${indexAvg.toFixed(2)}%)` : ""} — {strongEtfs.length} SHORT play{strongEtfs.length > 1 ? "s" : ""} working
               </h2>
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 mb-3">
               These go UP when the market falls — buying one = betting the market DOWN (all IBKR-tradable).
-              <span className="text-bull"> Green ↑ = the play is working right now.</span> 3x versions move faster and are riskier.
+              3x versions move faster and are riskier.
             </p>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {[...INVERSE_ETFS]
-                .sort((a, b) => (etfBySym.get(b.symbol)?.changePct ?? -99) - (etfBySym.get(a.symbol)?.changePct ?? -99))
+              {strongEtfs
                 .map((e) => {
-                  const q = etfBySym.get(e.symbol);
+                  const q = e.q;
                   const now = q?.last || nowPrice(e.symbol) || 0;
                   const chg = q?.changePct;
-                  const active = (chg ?? 0) >= 0.2;
+                  const active = true;
                   const owned = ownedBySym.get(e.symbol) ?? 0;
                   // Play levels anchored to today's open: target +3%, stop -2% —
                   // the same defaults the trade popup suggests.
@@ -261,6 +271,7 @@ function Alerts() {
                 })}
             </div>
           </section>
+          )}
 
           {/* ---- Buy Alerts ---- */}
           <section>
