@@ -31,9 +31,10 @@ const timeAgo = (iso?: string) => {
 function FnoAlerts() {
   const { signals, best, isFetching, marketFalling, indexAvg, updated, marketOpen, closedUnderlying } = useFnoSignals();
   const { data: backtest } = useQuery({ queryKey: ["ts-backtest"], queryFn: getTsBacktest, refetchInterval: 300_000 });
-  const [trade, setTrade] = useState<{ symbol: string; c: OptionContract; q?: OptionQuote } | null>(null);
+  const [trade, setTrade] = useState<{ symbol: string; c: OptionContract; q?: OptionQuote; stop?: number; target?: number } | null>(null);
 
-  const openTrade = (s: FnoSignal) => setTrade({ symbol: s.underlying, c: s.contract, q: s.quote });
+  const openTrade = (s: FnoSignal) =>
+    setTrade({ symbol: s.underlying, c: s.contract, q: s.quote, stop: s.ready ? s.stop : undefined, target: s.ready ? s.target : undefined });
 
   return (
     <div className="p-6 space-y-5">
@@ -90,7 +91,7 @@ function FnoAlerts() {
       {backtest && <FnoRealityCheck b={backtest} active={signals.length} closed={closedUnderlying} marketFalling={marketFalling} indexAvg={indexAvg} />}
 
       {trade && (
-        <OptionTradeModal symbol={trade.symbol} contract={trade.c} quote={trade.q} onClose={() => setTrade(null)} />
+        <OptionTradeModal symbol={trade.symbol} contract={trade.c} quote={trade.q} defaultStop={trade.stop} defaultTarget={trade.target} onClose={() => setTrade(null)} />
       )}
     </div>
   );
