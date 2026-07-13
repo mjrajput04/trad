@@ -196,7 +196,7 @@ function WatchlistPage() {
                     deleteWatchlistMutation.mutate(watchlist.id);
                   }
                 }}
-                className={`px-2 h-8 rounded-r-lg text-xs hairline border-l-0 hover:bg-red-500/20 hover:text-red-400 transition ${currentWatchlistId === watchlist.id ? "bg-primary/15" : "bg-surface-1"}`}
+                className={`px-2 h-8 rounded-r-lg text-xs hairline border-l-0 hover:bg-bear/15 hover:text-bear transition ${currentWatchlistId === watchlist.id ? "bg-primary/15" : "bg-surface-1"}`}
                 title="Delete watchlist"
               >
                 <Trash2 className="h-3 w-3" />
@@ -222,7 +222,7 @@ function WatchlistPage() {
             <button
               onClick={handleCreateWatchlist}
               disabled={!newWatchlistName.trim() || createWatchlistMutation.isPending}
-              className="px-4 h-9 rounded-lg bg-primary text-white hover:bg-primary/90 transition disabled:opacity-50 text-sm font-medium"
+              className="px-4 h-9 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50 text-sm font-medium"
             >
               {createWatchlistMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
             </button>
@@ -292,7 +292,7 @@ function WatchlistPage() {
                     <GripVertical className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition" />
                     <button
                       onClick={() => removeSymbolMutation.mutate(item.id)}
-                      className="opacity-0 group-hover:opacity-100 transition hover:text-red-400"
+                      className="opacity-0 group-hover:opacity-100 transition hover:text-bear"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

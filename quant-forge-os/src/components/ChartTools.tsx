@@ -39,7 +39,7 @@ export function ChartDrawingTools({
           onClick={() => setActiveTool(tool.id)}
           className={`p-1.5 rounded-lg transition ${
             activeTool === tool.id 
-              ? "bg-primary text-white shadow-lg" 
+              ? "bg-primary text-primary-foreground shadow-lg"
               : "hover:bg-surface-2 text-muted-foreground"
           }`}
           title={tool.label}

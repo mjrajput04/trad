@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef } from "react";
+import { useTheme } from "@/lib/theme";
 
 /**
  * Free TradingView Advanced Chart embed — the real thing: candles, indicators,
@@ -7,6 +8,7 @@ import { memo, useEffect, useRef } from "react";
  */
 export const TradingViewChart = memo(function TradingViewChart({ symbol }: { symbol: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [theme] = useTheme();
 
   useEffect(() => {
     const container = ref.current;
@@ -32,7 +34,7 @@ export const TradingViewChart = memo(function TradingViewChart({ symbol }: { sym
       symbol,
       interval: "5",
       timezone: "America/New_York",
-      theme: "dark",
+      theme,
       style: "1",
       locale: "en",
       withdateranges: true,
@@ -49,7 +51,7 @@ export const TradingViewChart = memo(function TradingViewChart({ symbol }: { sym
     return () => {
       container.innerHTML = "";
     };
-  }, [symbol]);
+  }, [symbol, theme]);
 
   return <div ref={ref} className="w-full h-full" />;
 });

@@ -43,7 +43,7 @@ function Item({ to, label, icon: Icon }: { to: string; label: string; icon: any 
       className={cn(
         "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all",
         active
-          ? "bg-[oklch(0.74_0.18_235/0.12)] text-foreground"
+          ? "bg-primary/10 text-foreground"
           : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
       )}
     >

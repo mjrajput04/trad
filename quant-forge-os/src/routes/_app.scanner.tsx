@@ -134,7 +134,7 @@ function ScannerPage() {
             <p className="text-xs">No hits for this scan right now.</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-[var(--line)]">
             {hits.map((q) => (
               <div
                 key={q.conid}

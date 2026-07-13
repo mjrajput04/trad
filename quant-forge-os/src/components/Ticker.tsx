@@ -20,7 +20,7 @@ export function Ticker() {
 
   const items = [...tickerData, ...tickerData]; // Duplicate for seamless scrolling
   return (
-    <div className="relative overflow-hidden hairline-b bg-[oklch(0.17_0.013_260/0.7)] backdrop-blur-md">
+    <div className="relative overflow-hidden hairline-b bg-[var(--topbar-bg)] backdrop-blur-md">
       <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background to-transparent z-10" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-background to-transparent z-10" />
       <div className="ticker-track flex gap-8 whitespace-nowrap py-2.5">

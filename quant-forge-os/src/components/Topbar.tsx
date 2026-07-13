@@ -1,4 +1,4 @@
-import { Plug2, LogOut, ShieldCheck, Loader2 } from "lucide-react";
+import { Plug2, LogOut, ShieldCheck, Loader2, Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -7,6 +7,7 @@ import { LiveDot } from "./Delta";
 import { SymbolSearch } from "./SymbolSearch";
 import { useAuth } from "@/lib/auth-context";
 import { useTrading } from "@/lib/trading-context";
+import { useTheme } from "@/lib/theme";
 import { getAuthStatus, ensureSession, tickle, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ export function Topbar() {
   const [reviving, setReviving] = useState(false);
   const { user, signOut } = useAuth();
   const { isPaper } = useTrading();
+  const [theme, toggleTheme] = useTheme();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -75,12 +77,12 @@ export function Topbar() {
   const initials = (email.split("@")[0] || "U").slice(0, 2).toUpperCase();
 
   return (
-    <header className="h-14 hairline-b flex items-center gap-4 px-5 bg-[oklch(0.17_0.013_260/0.6)] backdrop-blur-xl sticky top-0 z-30">
+    <header className="h-14 hairline-b flex items-center gap-4 px-5 bg-[var(--topbar-bg)] backdrop-blur-xl sticky top-0 z-30">
       <div className="flex items-center gap-2">
         <div className={`flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-          isMarketOpen 
-            ? 'bg-[oklch(0.78_0.18_152/0.12)] text-bull' 
-            : 'bg-[oklch(0.66_0.22_22/0.12)] text-bear'
+          isMarketOpen
+            ? 'bg-bull/10 text-bull'
+            : 'bg-bear/10 text-bear'
         }`}>
           <LiveDot />
           Market {isMarketOpen ? 'Open' : 'Closed'}
@@ -107,12 +109,20 @@ export function Topbar() {
           title={ibkrOk ? "IBKR session active — open broker page" : "Click to reconnect (auto-tries revive first, login only if needed)"}
           className={`hidden md:inline-flex items-center gap-2 rounded-lg hairline px-3 h-9 text-xs transition disabled:opacity-60 ${
           ibkrOk
-            ? 'bg-[oklch(0.78_0.18_152/0.12)] text-bull hover:bg-[oklch(0.78_0.18_152/0.18)]'
-            : 'bg-[oklch(0.66_0.22_22/0.12)] text-bear hover:bg-[oklch(0.66_0.22_22/0.18)]'
+            ? 'bg-bull/10 text-bull hover:bg-bull/20'
+            : 'bg-bear/10 text-bear hover:bg-bear/20'
         }`}>
           {reviving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug2 className="h-3.5 w-3.5" />}
           <span>{ibkrOk ? 'IBKR Connected' : reviving ? 'Reconnecting…' : 'IBKR Reconnect'}</span>
           <LiveDot />
+        </button>
+
+        <button
+          onClick={toggleTheme}
+          title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          className="h-9 w-9 grid place-items-center rounded-lg hairline bg-surface-1 hover:bg-surface-2 text-muted-foreground hover:text-foreground transition"
+        >
+          {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
         </button>
 
         <DropdownMenu>

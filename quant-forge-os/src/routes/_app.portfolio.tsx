@@ -11,7 +11,7 @@ export const Route = createFileRoute("/_app/portfolio")({
   component: Portfolio,
 });
 
-const COLORS = ["oklch(0.74 0.18 235)", "oklch(0.70 0.18 295)", "oklch(0.78 0.18 152)", "oklch(0.82 0.16 78)", "oklch(0.66 0.22 22)", "oklch(0.45 0.02 260)"];
+const COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)", "var(--muted-foreground)"];
 
 function Portfolio() {
   const { data: summary, isLoading: loadingSummary } = useQuery({
@@ -98,7 +98,7 @@ function Portfolio() {
                         <Pie data={allocation} dataKey="value" innerRadius={45} outerRadius={70} stroke="none">
                           {allocation.map((a) => <Cell key={a.name} fill={a.color} />)}
                         </Pie>
-                        <Tooltip contentStyle={{ background: "oklch(0.20 0.015 260)", border: "1px solid oklch(1 0 0 / 10%)", borderRadius: 8, fontSize: 12 }} />
+                        <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>

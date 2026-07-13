@@ -117,7 +117,7 @@ export function CandlestickChart({
               y1={candle.yHigh}
               x2={candle.x}
               y2={candle.yLow}
-              stroke={candle.isUp ? "#22c55e" : "#ef4444"}
+              stroke={candle.isUp ? "var(--bull)" : "var(--bear)"}
               strokeWidth={1}
             />
             {/* Body */}
@@ -126,8 +126,8 @@ export function CandlestickChart({
               y={candle.bodyTop}
               width={candle.candleWidth}
               height={candle.bodyHeight}
-              fill={candle.isUp ? "#22c55e" : "#ef4444"}
-              stroke={candle.isUp ? "#22c55e" : "#ef4444"}
+              fill={candle.isUp ? "var(--bull)" : "var(--bear)"}
+              stroke={candle.isUp ? "var(--bull)" : "var(--bear)"}
               strokeWidth={0.5}
               rx={0.5}
             />
@@ -151,12 +151,12 @@ export function CandlestickChart({
             position: 'fixed',
             left: hoveredCandle.x - 250,
             top: hoveredCandle.y - 150,
-            background: 'oklch(0.20 0.015 260)',
-            border: '1px solid oklch(1 0 0 / 10%)',
+            background: 'var(--popover)',
+            border: '1px solid var(--border)',
             borderRadius: '8px',
             padding: '8px 12px',
             fontSize: '11px',
-            color: 'white',
+            color: 'var(--popover-foreground)',
             zIndex: 1000,
             pointerEvents: 'none',
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
@@ -166,10 +166,10 @@ export function CandlestickChart({
             {formatTime(candles[hoveredCandle.index].data.t)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 8px' }}>
-            <div>Open: <span style={{ color: '#22c55e' }}>${candles[hoveredCandle.index].data.o.toFixed(2)}</span></div>
-            <div>High: <span style={{ color: '#22c55e' }}>${candles[hoveredCandle.index].data.h.toFixed(2)}</span></div>
-            <div>Low: <span style={{ color: '#ef4444' }}>${candles[hoveredCandle.index].data.l.toFixed(2)}</span></div>
-            <div>Close: <span style={{ color: candles[hoveredCandle.index].data.c >= candles[hoveredCandle.index].data.o ? '#22c55e' : '#ef4444' }}>${candles[hoveredCandle.index].data.c.toFixed(2)}</span></div>
+            <div>Open: <span style={{ color: 'var(--bull)' }}>${candles[hoveredCandle.index].data.o.toFixed(2)}</span></div>
+            <div>High: <span style={{ color: 'var(--bull)' }}>${candles[hoveredCandle.index].data.h.toFixed(2)}</span></div>
+            <div>Low: <span style={{ color: 'var(--bear)' }}>${candles[hoveredCandle.index].data.l.toFixed(2)}</span></div>
+            <div>Close: <span style={{ color: candles[hoveredCandle.index].data.c >= candles[hoveredCandle.index].data.o ? 'var(--bull)' : 'var(--bear)' }}>${candles[hoveredCandle.index].data.c.toFixed(2)}</span></div>
           </div>
         </div>
       )}

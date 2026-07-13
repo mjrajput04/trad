@@ -7,7 +7,7 @@ export function Delta({ value, suffix = "%", className }: { value: number; suffi
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium num",
-        positive ? "text-bull bg-[oklch(0.78_0.18_152/0.12)]" : "text-bear bg-[oklch(0.66_0.22_22/0.12)]",
+        positive ? "text-bull bg-bull/10" : "text-bear bg-bear/10",
         className,
       )}
     >

@@ -10,8 +10,8 @@ export const Route = createFileRoute("/_app/analysis")({
   component: Analysis,
 });
 
-const BULL = "oklch(0.78 0.18 152)";
-const BEAR = "oklch(0.66 0.22 22)";
+const BULL = "var(--bull)";
+const BEAR = "var(--bear)";
 
 const signed = (n: number) => `${n >= 0 ? "+" : "−"}$${fmtMoney(Math.abs(n))}`;
 const dayKey = (t: number) => {
@@ -186,14 +186,14 @@ function Analysis() {
               <div className="h-[220px]">
                 <ResponsiveContainer>
                   <BarChart data={daily} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "oklch(0.66 0.018 255)" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "oklch(0.66 0.018 255)" }} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => `$${v}`} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => `$${v}`} />
                     <Tooltip
-                      cursor={{ fill: "oklch(1 0 0 / 4%)" }}
-                      contentStyle={{ background: "oklch(0.20 0.015 260)", border: "1px solid oklch(1 0 0 / 10%)", borderRadius: 8, fontSize: 11 }}
+                      cursor={{ fill: "var(--grid)" }}
+                      contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11 }}
                       formatter={(v: any) => [signed(Number(v)), "Realized P&L"]}
                     />
-                    <ReferenceLine y={0} stroke="oklch(1 0 0 / 18%)" />
+                    <ReferenceLine y={0} stroke="var(--line-strong)" />
                     <Bar dataKey="pnl" radius={3} maxBarSize={48}>
                       {daily.map((d, i) => (
                         <Cell key={i} fill={d.pnl >= 0 ? BULL : BEAR} fillOpacity={0.85} />
