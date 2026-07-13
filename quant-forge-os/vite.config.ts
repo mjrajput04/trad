@@ -42,6 +42,11 @@ export default defineConfig({
           changeOrigin: true,
           secure: false,
         },
+        "/admin-api": {
+          target: TS_ENGINE,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
   },
