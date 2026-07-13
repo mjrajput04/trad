@@ -8,6 +8,7 @@ import {
   BellRing,
   History,
   BarChart3,
+  Coins,
   Plug,
   Settings,
   TrendingUp,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/alerts", label: "AI Alerts", icon: BellRing },
   { to: "/watchlist", label: "Watchlist", icon: Eye },
+  { to: "/options", label: "F&O Options", icon: Coins },
   { to: "/scanner", label: "Scanner", icon: Radar },
   { to: "/portfolio", label: "Portfolio", icon: Wallet },
   { to: "/positions", label: "Positions", icon: Layers },

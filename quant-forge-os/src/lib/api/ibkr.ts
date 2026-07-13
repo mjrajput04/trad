@@ -516,6 +516,8 @@ async function submitOrders(orders: Record<string, unknown>[]) {
 
 export interface PlaceOrderParams {
   symbol: string;
+  /** Trade this exact contract (e.g. an option conid) instead of resolving the stock symbol. */
+  conid?: number;
   side: "BUY" | "SELL";
   quantity: number;
   orderType: "MKT" | "LMT" | "STP";
@@ -541,7 +543,7 @@ export async function placeOrder(params: PlaceOrderParams) {
     throw new Error(`${orderType} orders need a price`);
   }
 
-  const conid = await getConid(symbol);
+  const conid = params.conid ?? (await getConid(symbol));
   if (!conid) throw new Error(`Symbol ${symbol} not found at IBKR`);
 
   const cOID = `nova-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -803,6 +805,138 @@ export async function getChartData(conid: number, period = "1d", bar = "5min"): 
     }));
   } catch (error) {
     console.warn("Chart data failed:", error);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Options (F&O) — real IBKR option chain
+// ---------------------------------------------------------------------------
+
+export interface OptionMeta {
+  conid: number;
+  months: string[]; // e.g. ["JUL26","AUG26",...]
+}
+
+/** Underlying conid + available option months for a stock/ETF symbol. */
+export async function getOptionMeta(symbol: string): Promise<OptionMeta | null> {
+  const res = await ibkr<any[]>(
+    `/iserver/secdef/search?symbol=${encodeURIComponent(symbol.trim().toUpperCase())}`
+  );
+  const row = (res ?? []).find(
+    (r) => Number(r.conid) > 0 && (r.sections ?? []).some((s: any) => s.secType === "OPT")
+  );
+  if (!row) return null;
+  const sec = row.sections.find((s: any) => s.secType === "OPT");
+  const months =
+    typeof sec?.months === "string" ? sec.months.split(";").filter(Boolean) : [];
+  return { conid: Number(row.conid), months };
+}
+
+export interface OptionContract {
+  conid: number;
+  strike: number;
+  right: "C" | "P";
+  maturityDate: string; // YYYYMMDD
+}
+
+async function optionInfo(
+  underlying: number,
+  month: string,
+  right: "C" | "P",
+  strike: number
+): Promise<OptionContract[]> {
+  const res = await ibkr<any>(
+    `/iserver/secdef/info?conid=${underlying}&sectype=OPT&month=${month}&exchange=SMART&strike=${strike}&right=${right}`
+  );
+  const arr = Array.isArray(res) ? res : res ? [res] : [];
+  return arr
+    .filter((o) => Number(o.conid) > 0)
+    .map((o) => ({
+      conid: Number(o.conid),
+      strike: Number(o.strike ?? strike),
+      right,
+      maturityDate: String(o.maturityDate ?? ""),
+    }));
+}
+
+/**
+ * Option chain for one month: the `span·2+1` strikes nearest the spot, with the
+ * call+put contract ids for every expiry inside that month (weeklies included).
+ */
+export async function getOptionChain(
+  underlying: number,
+  month: string,
+  spot: number,
+  span = 6
+): Promise<{ strikes: number[]; contracts: OptionContract[] }> {
+  const st = await ibkr<{ call?: number[]; put?: number[] }>(
+    `/iserver/secdef/strikes?conid=${underlying}&sectype=OPT&month=${month}&exchange=SMART`
+  );
+  const all = st?.call ?? [];
+  if (!all.length) return { strikes: [], contracts: [] };
+  const picked = [...new Set(
+    [...all].sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot)).slice(0, span * 2 + 1)
+  )].sort((a, b) => a - b);
+
+  const contracts: OptionContract[] = [];
+  const CHUNK = 4; // don't hammer the gateway
+  for (let i = 0; i < picked.length; i += CHUNK) {
+    const batch = picked.slice(i, i + CHUNK);
+    const results = await Promise.all(
+      batch.flatMap((k) => [
+        optionInfo(underlying, month, "C", k).catch(() => []),
+        optionInfo(underlying, month, "P", k).catch(() => []),
+      ])
+    );
+    results.forEach((r) => contracts.push(...r));
+  }
+  return { strikes: picked, contracts };
+}
+
+export interface OptionQuote {
+  conid: number;
+  last: number;
+  bid: number;
+  ask: number;
+  changePct: number;
+  volume: number;
+  iv: number;    // implied volatility %
+  delta: number;
+  theta: number;
+}
+
+// 7283 implied vol, 7308 delta, 7310 theta (CP snapshot field ids)
+const OPTION_FIELDS = "31,84,86,82,83,87,7283,7308,7310";
+
+/** Live quotes + greeks for option conids (same subscribe-then-read dance). */
+export async function getOptionQuotes(conids: number[]): Promise<OptionQuote[]> {
+  if (!conids.length) return [];
+  const fresh = conids.filter((id) => !SUBSCRIBED_CONIDS.has(id));
+  if (fresh.length) {
+    await ibkr<any[]>(
+      `/iserver/marketdata/snapshot?conids=${fresh.join(",")}&fields=${OPTION_FIELDS}`
+    ).catch(() => []);
+    fresh.forEach((id) => SUBSCRIBED_CONIDS.add(id));
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  try {
+    const data = await ibkr<any[]>(
+      `/iserver/marketdata/snapshot?conids=${conids.join(",")}&fields=${OPTION_FIELDS}`
+    );
+    const pctNum = (v: unknown) => parseIBKRNum(String(v ?? "").replace("%", ""));
+    return (data ?? []).map((d) => ({
+      conid: d.conid,
+      last: parseIBKRNum(d["31"]),
+      bid: parseIBKRNum(d["84"]),
+      ask: parseIBKRNum(d["86"]),
+      changePct: parseIBKRNum(d["83"]),
+      volume: parseVolume(d["87"]),
+      iv: pctNum(d["7283"]),
+      delta: parseIBKRNum(d["7308"]),
+      theta: parseIBKRNum(d["7310"]),
+    }));
+  } catch {
     return [];
   }
 }

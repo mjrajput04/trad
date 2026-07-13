@@ -193,45 +193,66 @@ function Alerts() {
               These go UP when the market falls — buying one = betting the market DOWN (all IBKR-tradable).
               <span className="text-bull"> Green ↑ = the play is working right now.</span> 3x versions move faster and are riskier.
             </p>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {[...INVERSE_ETFS]
                 .sort((a, b) => (etfBySym.get(b.symbol)?.changePct ?? -99) - (etfBySym.get(a.symbol)?.changePct ?? -99))
                 .map((e) => {
                   const q = etfBySym.get(e.symbol);
-                  const p = q?.last || nowPrice(e.symbol);
+                  const now = q?.last || nowPrice(e.symbol) || 0;
                   const chg = q?.changePct;
                   const active = (chg ?? 0) >= 0.2;
                   const owned = ownedBySym.get(e.symbol) ?? 0;
+                  // Play levels anchored to today's open: target +3%, stop -2% —
+                  // the same defaults the trade popup suggests.
+                  const base = q?.open || q?.prevClose || now;
+                  const entry = base > 0 ? +base.toFixed(2) : 0;
+                  const target = entry > 0 ? +(entry * 1.03).toFixed(2) : 0;
+                  const stopL = entry > 0 ? +(entry * 0.98).toFixed(2) : 0;
                   return (
-                    <div key={e.symbol} className={`rounded-xl hairline p-3 flex items-center justify-between gap-2 ${active ? "bg-bull/5 border border-bull/25" : "bg-surface-1"}`}>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <Link to="/stock/$symbol" params={{ symbol: e.symbol }} className="font-semibold text-sm hover:text-primary transition" title="Open chart">
+                    <div key={e.symbol} className={`rounded-2xl p-4 flex flex-col gap-3 ${active ? "glass border border-bull/25" : "glass"}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Link to="/stock/$symbol" params={{ symbol: e.symbol }} className="text-lg font-bold hover:text-primary transition" title="Open chart">
                             {e.symbol}
                           </Link>
                           {active && <span className="rounded bg-bull/15 text-bull text-[9px] font-bold px-1.5 py-0.5">ACTIVE</span>}
                         </div>
-                        <div className="text-[10px] text-muted-foreground truncate">{e.name}</div>
-                        <div className="text-[11px] num">
-                          {p ? money(p) : "—"}
-                          {chg != null && (
-                            <span className={`ml-1.5 ${chg >= 0 ? "text-bull" : "text-bear"}`}>{pct(chg)}</span>
-                          )}
-                        </div>
+                        {chg != null && (
+                          <span className={`text-xs num font-semibold ${chg >= 0 ? "text-bull" : "text-bear"}`}>{pct(chg)}</span>
+                        )}
                       </div>
-                      <div className="shrink-0 flex gap-1.5">
+                      <div className="text-[10px] text-muted-foreground -mt-2">{e.name}</div>
+
+                      {entry > 0 ? (
+                        <>
+                          <div className="flex gap-2">
+                            <Level label="Entry" value={entry} tone="info" />
+                            <Level label="Target" value={target} sub="+3.00%" tone="bull" />
+                            <Level label="Stop" value={stopL} sub="-2.00%" tone="bear" />
+                          </div>
+                          <LevelBar entry={entry} target={target} stop={stopL} now={now || undefined} />
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span>Bearish play · rises when the market falls</span>
+                            {now > 0 && <span className="num">Now {money(now)}</span>}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[11px] text-muted-foreground py-2">Log in to IBKR for live levels.</div>
+                      )}
+
+                      <div className="flex gap-2 mt-auto">
                         <button
-                          onClick={() => setTrade({ symbol: e.symbol, side: "BUY", defaults: p ? { price: p } : undefined })}
-                          className="h-8 px-3 rounded-lg bg-bull/90 hover:bg-bull text-background text-xs font-bold inline-flex items-center gap-1 transition"
+                          onClick={() => setTrade({ symbol: e.symbol, side: "BUY", defaults: now > 0 ? { price: now, stop: +(now * 0.98).toFixed(2), takeProfit: +(now * 1.03).toFixed(2) } : undefined })}
+                          className="flex-1 h-9 rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition"
                         >
-                          <ArrowUpRight className="h-3.5 w-3.5" /> Buy
+                          <ArrowUpRight className="h-4 w-4" /> Buy
                         </button>
                         {owned > 0 && (
                           <button
                             onClick={() => openSell(e.symbol)}
-                            className="h-8 px-3 rounded-lg bg-bear/90 hover:bg-bear text-background text-xs font-bold inline-flex items-center gap-1 transition"
+                            className="flex-1 h-9 rounded-lg bg-bear glow-bear text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition"
                           >
-                            <ArrowDownRight className="h-3.5 w-3.5" /> Sell {owned}
+                            <ArrowDownRight className="h-4 w-4" /> Sell {owned}
                           </button>
                         )}
                       </div>
