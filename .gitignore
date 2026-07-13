@@ -30,3 +30,4 @@ pnpm-debug.log*
 !.vscode/extensions.json
 *.suo
 *.sw?
+admin-api/.env
