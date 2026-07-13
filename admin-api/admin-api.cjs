@@ -79,6 +79,40 @@ async function requireAdmin(req, res, next) {
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// ---- OTP: create/edit/delete require a code emailed to the TARGET user's
+// address (the email in the form / the user being edited), proving that inbox
+// is reachable before the account changes. Keyed by that target email. ----
+const otpStore = new Map(); // targetEmail -> { code, expires }
+
+app.post("/otp/request", requireAdmin, async (req, res) => {
+  if (!mailer) return res.status(500).json({ error: "Email is not configured on the server" });
+  const to = String(req.body?.email || "").trim().toLowerCase();
+  if (!to || !/^\S+@\S+\.\S+$/.test(to)) return res.status(400).json({ error: "Valid target email required" });
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  otpStore.set(to, { code, expires: Date.now() + 5 * 60 * 1000 });
+  try {
+    await mailer.sendMail({
+      from: `NOVA Terminal <${GMAIL_USER}>`,
+      to,
+      subject: `NOVA verification code: ${code}`,
+      text: `Your NOVA Terminal verification code is ${code}.\nIt expires in 5 minutes.\nAction: ${req.body?.action || "account setup"}.\nIf you didn't expect this, ignore this email.`,
+    });
+    res.json({ ok: true, sentTo: to });
+  } catch (e) {
+    res.status(500).json({ error: "Could not send the code: " + e.message });
+  }
+});
+
+// One-time verify of the code that was emailed to `target`.
+function verifyOtp(target, otp) {
+  const key = String(target || "").toLowerCase();
+  const rec = otpStore.get(key);
+  const code = String(otp || "").trim();
+  if (!rec || !code || rec.code !== code || Date.now() > rec.expires) return false;
+  otpStore.delete(key); // single use
+  return true;
+}
+
 // List users
 app.get("/users", requireAdmin, async (_req, res) => {
   try {
@@ -100,6 +134,10 @@ app.post("/users", requireAdmin, async (req, res) => {
   const sendEmail = !!req.body.sendEmail;
   if (!email || !password || password.length < 6) {
     return res.status(400).json({ error: "Email + password (min 6 chars) required" });
+  }
+  // Verify the code that was emailed to the NEW user's own address.
+  if (!verifyOtp(email, req.headers["x-otp"] || req.body.otp)) {
+    return res.status(401).json({ error: `Invalid or expired code — request a fresh one sent to ${email}` });
   }
   const client = await pool.connect();
   try {
@@ -157,6 +195,12 @@ app.patch("/users/:id", requireAdmin, async (req, res) => {
   if (!newEmail && !newPass) return res.status(400).json({ error: "Nothing to update" });
   if (newPass && newPass.length < 6) return res.status(400).json({ error: "Password too short" });
   try {
+    // Code was emailed to this user's CURRENT address — look it up and verify.
+    const cur = await pool.query(`select email from auth.users where id = $1`, [id]);
+    if (!cur.rowCount) return res.status(404).json({ error: "User not found" });
+    if (!verifyOtp(cur.rows[0].email, req.headers["x-otp"] || req.body.otp)) {
+      return res.status(401).json({ error: `Invalid or expired code — request a fresh one sent to ${cur.rows[0].email}` });
+    }
     if (newPass) {
       await pool.query(
         `update auth.users set encrypted_password = extensions.crypt($1, extensions.gen_salt('bf', 10)),
@@ -185,6 +229,12 @@ app.patch("/users/:id", requireAdmin, async (req, res) => {
 // Delete user
 app.delete("/users/:id", requireAdmin, async (req, res) => {
   try {
+    // Code was emailed to this user's own address — verify before deleting.
+    const cur = await pool.query(`select email from auth.users where id = $1`, [req.params.id]);
+    if (!cur.rowCount) return res.status(404).json({ error: "User not found" });
+    if (!verifyOtp(cur.rows[0].email, req.headers["x-otp"] || req.body.otp)) {
+      return res.status(401).json({ error: `Invalid or expired code — request a fresh one sent to ${cur.rows[0].email}` });
+    }
     await pool.query(`delete from auth.users where id = $1`, [req.params.id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
