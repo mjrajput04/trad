@@ -3,10 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Coins, Loader2, X, Zap } from "lucide-react";
 import {
-  getOptionMeta, getOptionChain, getOptionQuotes, getQuotes, placeOrder,
+  getOptionMeta, getOptionChain, getOptionQuotes, getQuotes, placeOrder, findOptionPlay,
   type OptionContract, type OptionQuote,
 } from "@/lib/api/ibkr";
+import { getTsAlerts, type TsAlert } from "@/lib/api/alerts";
 import { SymbolPicker } from "@/components/SymbolPicker";
+import { Level, LevelBar } from "@/components/TradeLevels";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
@@ -38,12 +40,12 @@ function OptionsPage() {
   });
   const activeMonth = month && meta?.months.includes(month) ? month : meta?.months[0] ?? "";
 
-  // Live spot for the underlying
+  // Live spot for the underlying (per-second)
   const { data: spotQuotes } = useQuery({
     queryKey: ["order-quote", symbol],
     queryFn: () => getQuotes([symbol]),
     enabled: symbol.trim().length > 0,
-    refetchInterval: 3_000,
+    refetchInterval: 1_000,
   });
   const spot = spotQuotes?.[0]?.last ?? 0;
   const spotChg = spotQuotes?.[0]?.changePct ?? 0;
@@ -84,7 +86,7 @@ function OptionsPage() {
     queryKey: ["opt-quotes", visibleConids.join(",")],
     queryFn: () => getOptionQuotes(visibleConids),
     enabled: visibleConids.length > 0,
-    refetchInterval: 5_000,
+    refetchInterval: 1_000, // per-second, like the rest of the terminal
   });
   const quoteByConid = new Map(optQuotes.map((q) => [q.conid, q]));
 
@@ -109,6 +111,9 @@ function OptionsPage() {
           </div>
         )}
       </div>
+
+      {/* AI F&O signals — derived from the same 5-gate stock engine */}
+      <FnoSignals onTrade={(c, q) => setTrade({ c, q })} />
 
       {/* Controls */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -182,7 +187,7 @@ function OptionsPage() {
             );
           })}
           <div className="px-4 py-2 text-[10px] text-muted-foreground">
-            Live from IBKR · greeks: Δ delta · quotes refresh every 5s · 1 contract = 100 shares
+            Live from IBKR · greeks: Δ delta · quotes tick every ~1s · 1 contract = 100 shares
           </div>
         </div>
       )}
@@ -196,6 +201,147 @@ function OptionsPage() {
         />
       )}
     </div>
+  );
+}
+
+// ---- AI F&O signals: the engine's working stock alerts expressed as options ----
+// A working BUY alert → slightly-ITM CALL (7–35d expiry). Market falling hard
+// (SPY ≤ −0.3%) → slightly-ITM SPY PUT. Premium target/stop are delta-mapped
+// from the underlying alert levels. Same silent gate: nothing strong → hidden.
+interface FnoSignal {
+  key: string;
+  label: string;         // e.g. "NVDA CALL"
+  contract: OptionContract & { underlyingConid: number };
+  alert?: TsAlert;       // source stock alert (for CALLs)
+  underlying: string;
+  score?: number;
+}
+
+function FnoSignals({ onTrade }: { onTrade: (c: OptionContract, q?: OptionQuote) => void }) {
+  // Working stock alerts from the engine (same validity gate as the alerts page)
+  const { data: ts } = useQuery({ queryKey: ["ts-alerts"], queryFn: getTsAlerts, refetchInterval: 30_000 });
+  const alerts = (ts?.alerts ?? []).filter((a) => a?.symbol && Number(a.entry) > 0).slice(0, 4);
+
+  // Underlying live quotes (alert symbols + SPY for the bearish case)
+  const underlyings = [...new Set([...alerts.map((a) => a.symbol), "SPY"])];
+  const { data: uq = [] } = useQuery({
+    queryKey: ["fno-underlying", underlyings.join(",")],
+    queryFn: () => getQuotes(underlyings),
+    enabled: underlyings.length > 0,
+    refetchInterval: 1_000,
+  });
+  const uBySym = new Map(uq.map((q) => [q.symbol, q]));
+  const spy = uBySym.get("SPY");
+  const marketFalling = (spy?.changePct ?? 0) <= -0.3;
+
+  // Resolve one option contract per signal (cached — contract ids don't move)
+  const sigKey = alerts.map((a) => a.symbol).join(",") + (marketFalling ? "+SPYPUT" : "");
+  const { data: signals = [], isFetching } = useQuery({
+    queryKey: ["fno-signals", sigKey],
+    queryFn: async () => {
+      const out: FnoSignal[] = [];
+      for (const a of alerts) {
+        const u = uBySym.get(a.symbol);
+        const c = await findOptionPlay(a.symbol, "C", u?.last || a.entry).catch(() => null);
+        if (c) out.push({ key: `${a.symbol}-C`, label: `${a.symbol} CALL`, contract: c, alert: a, underlying: a.symbol, score: a.score });
+      }
+      if (marketFalling && spy?.last) {
+        const c = await findOptionPlay("SPY", "P", spy.last).catch(() => null);
+        if (c) out.push({ key: "SPY-P", label: "SPY PUT", contract: c, underlying: "SPY" });
+      }
+      return out;
+    },
+    enabled: alerts.length > 0 || marketFalling,
+    staleTime: 5 * 60_000,
+  });
+
+  // Live premiums for the signal contracts (per-second)
+  const conids = signals.map((s) => s.contract.conid);
+  const { data: prem = [] } = useQuery({
+    queryKey: ["fno-signal-quotes", conids.join(",")],
+    queryFn: () => getOptionQuotes(conids),
+    enabled: conids.length > 0,
+    refetchInterval: 1_000,
+  });
+  const premByConid = new Map(prem.map((q) => [q.conid, q]));
+
+  if (!signals.length && !isFetching) return null;
+
+  return (
+    <section className="rounded-2xl glass p-5 border border-info/20">
+      <div className="flex items-center gap-2">
+        <Zap className="h-4 w-4 text-info" />
+        <h2 className="text-sm font-semibold">AI F&O Signals</h2>
+        <span className="text-[11px] text-muted-foreground">
+          {isFetching && !signals.length ? "resolving contracts…" : `${signals.length} active · from the same 5-gate engine`}
+        </span>
+      </div>
+      <p className="text-[11px] text-muted-foreground mt-1 mb-3">
+        Each working stock alert expressed as a slightly-ITM option (7–35 day expiry). Premium target/stop are
+        delta-mapped estimates from the stock's levels. Options move fast — same 1%-risk discipline applies.
+      </p>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {signals.map((s) => {
+          const q = premByConid.get(s.contract.conid);
+          const u = uBySym.get(s.underlying);
+          const mid = q && q.bid > 0 && q.ask > 0 ? (q.bid + q.ask) / 2 : q?.last ?? 0;
+          const delta = Math.abs(q?.delta ?? (s.contract.right === "C" ? 0.6 : -0.6));
+          // Delta-mapped premium levels from the underlying alert (est.)
+          let tgt = 0, stp = 0;
+          if (s.alert && u?.last && mid > 0) {
+            tgt = Math.max(0.01, mid + delta * (s.alert.target - u.last));
+            stp = Math.max(0.01, mid - delta * (u.last - s.alert.stop));
+          } else if (mid > 0 && u?.last) {
+            // SPY PUT default: ±1.5% underlying move mapped through delta
+            tgt = mid + delta * (u.last * 0.015);
+            stp = Math.max(0.01, mid - delta * (u.last * 0.01));
+          }
+          const isCall = s.contract.right === "C";
+          return (
+            <div key={s.key} className="rounded-2xl glass p-4 flex flex-col gap-3 border border-surface-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-lg font-bold ${isCall ? "text-bull" : "text-bear"}`}>{s.label}</span>
+                  {s.score != null && <span className="rounded-md bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5">Score {Math.round(s.score)}</span>}
+                </div>
+                {q?.iv ? <span className="text-[10px] text-muted-foreground num">IV {q.iv.toFixed(0)}%</span> : null}
+              </div>
+              <div className="text-[11px] text-muted-foreground -mt-2">
+                ${s.contract.strike} strike · exp {fmtExpiry(s.contract.maturityDate)} · Δ {q?.delta ? q.delta.toFixed(2) : "—"}
+                {u?.last ? <> · {s.underlying} ${fmtMoney(u.last)}</> : null}
+              </div>
+              {mid > 0 && tgt > 0 ? (
+                <>
+                  <div className="flex gap-2">
+                    <Level label="Premium" value={mid} tone="info" />
+                    <Level label="Target ≈" value={tgt} sub={`+${(((tgt - mid) / mid) * 100).toFixed(0)}%`} tone="bull" />
+                    <Level label="Stop ≈" value={stp} sub={`${(((stp - mid) / mid) * 100).toFixed(0)}%`} tone="bear" />
+                  </div>
+                  <LevelBar entry={mid} target={tgt} stop={stp} now={q?.last || mid} />
+                </>
+              ) : (
+                <div className="text-[11px] text-muted-foreground py-2">Waiting for live premium…</div>
+              )}
+              {s.alert?.reasons?.length ? (
+                <div className="flex flex-wrap gap-1">
+                  {s.alert.reasons.slice(0, 3).map((r, i) => (
+                    <span key={i} className="text-[10px] rounded bg-surface-2 px-1.5 py-0.5 text-muted-foreground">{r}</span>
+                  ))}
+                </div>
+              ) : !isCall ? (
+                <div className="text-[10px] rounded bg-surface-2 px-1.5 py-0.5 text-muted-foreground w-fit">Market falling — bearish index play</div>
+              ) : null}
+              <button
+                onClick={() => onTrade(s.contract, q)}
+                className={`mt-auto h-9 rounded-lg text-sm font-bold text-background inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition ${isCall ? "bg-bull glow-bull" : "bg-bear glow-bear"}`}
+              >
+                <Zap className="h-4 w-4" /> Trade {s.label}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

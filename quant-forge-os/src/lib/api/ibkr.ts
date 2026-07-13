@@ -894,6 +894,49 @@ export async function getOptionChain(
   return { strikes: picked, contracts };
 }
 
+/**
+ * Pick the single best option contract to express a directional signal:
+ * the strike just in-the-money (C: below spot, P: above spot) with an expiry
+ * 7–35 days out (enough time to be right, not bleeding theta on a 0DTE).
+ */
+export async function findOptionPlay(
+  symbol: string,
+  right: "C" | "P",
+  spot: number
+): Promise<(OptionContract & { underlyingConid: number }) | null> {
+  const meta = await getOptionMeta(symbol);
+  if (!meta || spot <= 0) return null;
+  for (const month of meta.months.slice(0, 2)) {
+    try {
+      const st = await ibkr<{ call?: number[] }>(
+        `/iserver/secdef/strikes?conid=${meta.conid}&sectype=OPT&month=${month}&exchange=SMART`
+      );
+      const strikes = st?.call ?? [];
+      if (!strikes.length) continue;
+      const itm =
+        right === "C"
+          ? [...strikes].filter((k) => k <= spot).sort((a, b) => b - a)[0]
+          : [...strikes].filter((k) => k >= spot).sort((a, b) => a - b)[0];
+      const strike = itm ?? [...strikes].sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot))[0];
+      const infos = await optionInfo(meta.conid, month, right, strike);
+      const now = Date.now();
+      const inWindow = infos
+        .map((c) => ({
+          c,
+          days: (new Date(
+            `${c.maturityDate.slice(0, 4)}-${c.maturityDate.slice(4, 6)}-${c.maturityDate.slice(6, 8)}T21:00:00Z`
+          ).getTime() - now) / 86_400_000,
+        }))
+        .filter((x) => x.days >= 7 && x.days <= 35)
+        .sort((a, b) => a.days - b.days);
+      if (inWindow[0]) return { ...inWindow[0].c, underlyingConid: meta.conid };
+    } catch {
+      /* try next month */
+    }
+  }
+  return null;
+}
+
 export interface OptionQuote {
   conid: number;
   last: number;
