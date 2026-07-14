@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
 import {
   Eye,
   Radar,
@@ -13,6 +14,10 @@ import {
   Plug,
   Settings,
   TrendingUp,
+  Menu,
+  X,
+  PanelLeftClose,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,12 +39,17 @@ const SYS = [
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-function Item({ to, label, icon: Icon }: { to: string; label: string; icon: any }) {
+const COLLAPSE_KEY = "nova_sidebar_collapsed";
+const PEEK_HIDE_MS = 600;   // hide this long after the pointer leaves
+const PEEK_MAX_MS = 5000;   // safety: an idle peek closes itself after 5s
+
+function Item({ to, label, icon: Icon, onNavigate }: { to: string; label: string; icon: any; onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const active = pathname === to;
   return (
     <Link
       to={to}
+      onClick={onNavigate}
       className={cn(
         "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all",
         active
@@ -56,31 +66,150 @@ function Item({ to, label, icon: Icon }: { to: string; label: string; icon: any 
   );
 }
 
-export function AppSidebar() {
+function SidebarBody({ onNavigate, onCollapse, collapseIcon }: {
+  onNavigate?: () => void;
+  onCollapse?: () => void;
+  collapseIcon?: "close" | "x";
+}) {
   return (
-    <aside className="hidden md:flex flex-col w-[240px] shrink-0 bg-sidebar hairline-r sticky top-0 h-screen">
+    <>
       <div className="flex items-center gap-2.5 px-5 h-14 hairline-b shrink-0">
         <div className="relative">
           <div className="h-7 w-7 rounded-lg gradient-primary grid place-items-center glow-primary">
             <TrendingUp className="h-4 w-4 text-background" strokeWidth={2.5} />
           </div>
         </div>
-        <div className="leading-tight">
+        <div className="leading-tight flex-1 min-w-0">
           <div className="text-sm font-semibold tracking-tight">NOVA</div>
           <div className="text-[10px] text-muted-foreground uppercase tracking-[0.18em]">Terminal</div>
         </div>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title={collapseIcon === "x" ? "Close menu" : "Hide sidebar"}
+            className="h-8 w-8 grid place-items-center rounded-lg hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition"
+          >
+            {collapseIcon === "x" ? <X className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-3 space-y-6">
         <div className="space-y-1">
           <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Trading</div>
-          {NAV.map((n) => <Item key={n.to} {...n} />)}
+          {NAV.map((n) => <Item key={n.to} {...n} onNavigate={onNavigate} />)}
         </div>
         <div className="space-y-1">
           <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">System</div>
-          {SYS.map((n) => <Item key={n.to} {...n} />)}
+          {SYS.map((n) => <Item key={n.to} {...n} onNavigate={onNavigate} />)}
         </div>
       </nav>
-    </aside>
+    </>
+  );
+}
+
+export function AppSidebar() {
+  // Desktop: collapsed hides the in-flow sidebar; hovering the left screen edge
+  // "peeks" it as an overlay that hides again on mouse-leave (or after 5s).
+  // Mobile has no hover, so a floating button opens the same panel as a drawer.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
+  });
+  const [peek, setPeek] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => { setMobileOpen(false); }, [pathname]); // navigating closes the drawer
+
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTimers = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    if (maxTimer.current) clearTimeout(maxTimer.current);
+  };
+  const armMaxTimer = () => {
+    if (maxTimer.current) clearTimeout(maxTimer.current);
+    maxTimer.current = setTimeout(() => setPeek(false), PEEK_MAX_MS);
+  };
+  const openPeek = () => { clearTimers(); setPeek(true); armMaxTimer(); };
+  const keepPeek = () => { if (hideTimer.current) clearTimeout(hideTimer.current); armMaxTimer(); };
+  const scheduleHidePeek = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setPeek(false), PEEK_HIDE_MS);
+  };
+  useEffect(() => () => clearTimers(), []);
+
+  const setCollapsedPersist = (v: boolean) => {
+    setCollapsed(v);
+    setPeek(false);
+    clearTimers();
+    try { localStorage.setItem(COLLAPSE_KEY, v ? "1" : "0"); } catch { /* private mode */ }
+  };
+
+  return (
+    <>
+      {/* ---- Desktop: in-flow sidebar (hidden when collapsed) ---- */}
+      {!collapsed && (
+        <aside className="hidden md:flex flex-col w-[240px] shrink-0 bg-sidebar hairline-r sticky top-0 h-screen">
+          <SidebarBody onCollapse={() => setCollapsedPersist(true)} />
+        </aside>
+      )}
+
+      {/* ---- Desktop collapsed: edge hover-zone + reopen tab ---- */}
+      {collapsed && (
+        <>
+          <div
+            className="hidden md:block fixed left-0 top-0 h-screen w-2 z-40"
+            onMouseEnter={openPeek}
+          />
+          <button
+            onClick={() => setCollapsedPersist(false)}
+            onMouseEnter={openPeek}
+            title="Open sidebar (click to pin)"
+            className="hidden md:grid fixed left-0 top-20 z-40 h-10 w-6 place-items-center rounded-r-lg glass-strong text-muted-foreground hover:text-foreground transition"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </>
+      )}
+
+      {/* ---- Desktop peek overlay ---- */}
+      {collapsed && peek && (
+        <aside
+          onMouseEnter={keepPeek}
+          onMouseMove={keepPeek}
+          onMouseLeave={scheduleHidePeek}
+          className="hidden md:flex flex-col fixed left-0 top-0 h-screen w-[240px] z-50 bg-sidebar hairline-r shadow-2xl animate-fade-up"
+        >
+          {/* the header button PINS it open while peeking */}
+          <SidebarBody onCollapse={() => setCollapsedPersist(false)} onNavigate={() => setPeek(false)} />
+          <div className="px-5 py-2 text-[10px] text-muted-foreground hairline-t">
+            Hover away to hide · click ▣ to pin
+          </div>
+        </aside>
+      )}
+
+      {/* ---- Mobile: floating menu button ---- */}
+      {!mobileOpen && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          title="Menu"
+          className="md:hidden fixed bottom-4 left-4 z-50 h-12 w-12 rounded-full gradient-primary glow-primary grid place-items-center text-background"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* ---- Mobile drawer ---- */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-[260px] bg-sidebar hairline-r shadow-2xl flex flex-col animate-fade-up">
+            <SidebarBody onCollapse={() => setMobileOpen(false)} collapseIcon="x" onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
