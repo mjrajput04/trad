@@ -148,14 +148,29 @@ export async function tickle() {
 
 let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
+// Tickle, and if the session went idle anyway, revive it in place
+// (ssodh/init + reauthenticate) so the user never has to click reconnect.
+async function pingOrRevive(onRevived?: () => void) {
+  try {
+    await tickle();
+  } catch {
+    const ok = await ensureSession(true).catch(() => false);
+    if (ok) onRevived?.();
+  }
+}
+
 /** Start a background tickle every 60s. Safe to call multiple times. */
-export function startSessionKeepalive() {
+export function startSessionKeepalive(onRevived?: () => void) {
   if (keepaliveTimer || typeof window === "undefined") return;
   keepaliveTimer = setInterval(() => {
-    tickle().catch(() => {
-      /* next auth-status poll will surface the problem */
-    });
+    pingOrRevive(onRevived);
   }, 60_000);
+  // Browsers throttle background-tab timers to a crawl, so the interval above
+  // effectively stops while the user is on another tab. The moment the tab is
+  // foregrounded again, ping/revive immediately instead of waiting a minute.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") pingOrRevive(onRevived);
+  });
 }
 
 export async function getAuthStatus(): Promise<AuthStatus> {

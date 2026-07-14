@@ -121,7 +121,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-import { tickle } from "@/lib/api/ibkr";
+import { startSessionKeepalive } from "@/lib/api/ibkr";
 
 function AuthListener() {
   const router = useRouter();
@@ -131,11 +131,11 @@ function AuthListener() {
       router.invalidate();
       qc.invalidateQueries();
     });
-    // Keep IBKR session alive every 60s
-    const ibkrPing = setInterval(() => {
-      tickle().catch(() => {});
-    }, 60_000);
-    return () => { subscription.unsubscribe(); clearInterval(ibkrPing); };
+    // Keep the IBKR session alive (60s ping + instant ping/revive when the tab
+    // is foregrounded). When a revive succeeds, refresh everything so the
+    // Connected badge and data go green without a manual reconnect.
+    startSessionKeepalive(() => qc.invalidateQueries());
+    return () => { subscription.unsubscribe(); };
   }, [router, qc]);
   return null;
 }

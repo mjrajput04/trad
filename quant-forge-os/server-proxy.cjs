@@ -93,6 +93,52 @@ const ibkrProxy = createProxyMiddleware({
 // Everything else (login UI at /, /v1/api, /sso, static assets, websockets) -> gateway
 app.use('/', ibkrProxy);
 
+// ---- Server-side session keepalive ------------------------------------------
+// Browsers throttle timers in background tabs, so the web app's own 60s tickle
+// stops the moment the user switches tabs — and the gateway drops idle sessions
+// after a few minutes. Keep the session alive HERE, 24/7: tickle every 60s and,
+// if the brokerage session went idle, revive it (ssodh/init + reauthenticate).
+// The session then lasts until IBKR's own SSO expiry (~daily), which is the one
+// thing that still needs a human login at backend.nassphx.com.
+const GW = 'http://localhost:7175/v1/api';
+
+async function gw(path, body) {
+  const res = await fetch(`${GW}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    ...(body ? { body } : {}),
+  });
+  let json = null;
+  try { json = await res.json(); } catch (_) {}
+  return { ok: res.ok, json };
+}
+
+let keepaliveBusy = false;
+let keepaliveCycles = 0;
+async function keepalive() {
+  if (keepaliveBusy) return;
+  keepaliveBusy = true;
+  try {
+    await gw('/tickle').catch(() => {});
+    // Every 5 minutes also check the brokerage session and revive it if idle.
+    if (++keepaliveCycles % 5 === 0) {
+      const st = await gw('/iserver/auth/status').catch(() => null);
+      const s = st && st.json;
+      if (s && s.connected && !s.authenticated) {
+        console.log('[keepalive] brokerage session idle — reviving');
+        await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
+        await gw('/iserver/reauthenticate').catch(() => {});
+      }
+    }
+  } catch (_) {
+    // gateway down or SSO fully expired — nothing to do until someone logs in
+  } finally {
+    keepaliveBusy = false;
+  }
+}
+setInterval(keepalive, 60_000);
+keepalive();
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 IBKR Proxy Server running on port ${PORT}`);
   console.log(`📡 Proxying requests to IBKR Gateway at localhost:7175`);
