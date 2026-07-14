@@ -128,6 +128,16 @@ async function keepalive() {
         console.log('[keepalive] brokerage session idle — reviving');
         await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
         await gw('/iserver/reauthenticate').catch(() => {});
+      } else if (s && s.authenticated) {
+        // SSO is up, but a FRESH login leaves the brokerage bridge
+        // uninitialized ("no bridge" 400s) until someone runs ssodh/init.
+        // Do it here so the app is ready even if no tab is open.
+        const acc = await fetch(`${GW}/iserver/accounts`).then((r) => r.status).catch(() => 0);
+        if (acc === 400 || acc === 401) {
+          console.log('[keepalive] bridge down after login — initializing');
+          await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
+          await gw('/iserver/reauthenticate').catch(() => {});
+        }
       }
     }
   } catch (_) {
