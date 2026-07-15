@@ -31,3 +31,17 @@ pnpm-debug.log*
 *.suo
 *.sw?
 admin-api/.env
+android-signing/
+android-app/app/
+android-app/build/
+android-app/.gradle/
+android-app/*.apk
+android-app/*.aab
+android-app/*.idsig
+android-app/gradle*
+android-app/store_icon.png
+android-app/res/
+android-app/src/
+android-app/manifest-checksum.txt
+android-app/settings.gradle
+android-app/local.properties

@@ -1,0 +1,38 @@
+{
+  "packageId": "com.nassphx.nova",
+  "host": "nassphx.com",
+  "name": "NOVA Terminal",
+  "launcherName": "NOVA",
+  "display": "standalone",
+  "themeColor": "#0c0c14",
+  "navigationColor": "#0c0c14",
+  "navigationColorDark": "#0c0c14",
+  "navigationDividerColor": "#0c0c14",
+  "navigationDividerColorDark": "#0c0c14",
+  "backgroundColor": "#0c0c14",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://nassphx.com/icons/icon-512.png",
+  "maskableIconUrl": "https://nassphx.com/icons/icon-512-maskable.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "D:\\ibkr sagar nipani\\trad\\android-signing\\nova.keystore",
+    "alias": "nova"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://nassphx.com/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://nassphx.com/",
+  "minSdkVersion": 21,
+  "orientation": "portrait"
+}
