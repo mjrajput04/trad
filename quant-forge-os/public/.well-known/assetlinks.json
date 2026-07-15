@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.nassphx.nova",
+      "sha256_cert_fingerprints": [
+        "C4:A6:77:5F:4A:79:C2:8B:C4:F8:27:F6:7F:75:F0:83:65:2B:88:4E:D4:36:B2:42:AD:DB:A2:F9:85:9E:F9:4B"
+      ]
+    }
+  }
+]
