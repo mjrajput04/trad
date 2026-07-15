@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.nassphx.nova'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.nassphx.nova"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    // Signing credentials live OUTSIDE the repo in android-signing/keystore.properties
+    // (gitignored). Never hardcode them here.
+    def keystoreProps = new Properties()
+    def keystorePropsFile = rootProject.file('../android-signing/keystore.properties')
+    if (keystorePropsFile.exists()) {
+        keystoreProps.load(new FileInputStream(keystorePropsFile))
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(keystoreProps.getProperty('storeFile', 'missing.keystore'))
+            storePassword keystoreProps.getProperty('storePassword', '')
+            keyAlias keystoreProps.getProperty('keyAlias', 'nova')
+            keyPassword keystoreProps.getProperty('keyPassword', '')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}
