@@ -2,12 +2,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  AlertTriangle, Loader2, Trophy, Bell, Newspaper, Activity,
-  ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingUp, TrendingDown,
+  AlertTriangle, Loader2, Trophy, Bell, Newspaper,
+  ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingDown,
 } from "lucide-react";
 import {
   getTsAlerts, getTsQuotes, getTsBacktest, bracketStop,
-  type TsAlert, type TsQuote, type TsBacktest,
+  type TsAlert, type TsBacktest,
 } from "@/lib/api/alerts";
 import { getPositions, getQuotes } from "@/lib/api/ibkr";
 import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTradeModal";
@@ -111,7 +111,6 @@ function Alerts() {
 
   const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
   const indices = (quotesData?.quotes ?? []).filter((q) => INDEX_SYMS.includes(q.symbol));
-  const stocks = (quotesData?.quotes ?? []).filter((q) => !INDEX_SYMS.includes(q.symbol));
 
   // Market direction from the major indices — used to surface downside plays.
   const indexAvg = indices.length ? indices.reduce((a, q) => a + (q.changePct || 0), 0) / indices.length : 0;
@@ -326,39 +325,28 @@ function Alerts() {
             )}
           </section>
 
-          {/* ---- Live Prices ---- */}
-          <section className="grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2 rounded-2xl glass p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-info" /> Live Prices</div>
-                <span className="text-[11px] text-muted-foreground">every ~1s</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-                {stocks.map((q) => <QuoteTile key={q.symbol} q={q} />)}
-              </div>
-            </div>
-            <div className="rounded-2xl glass p-5">
-              <div className="text-sm font-semibold mb-3 flex items-center gap-2"><Gauge className="h-4 w-4 text-violet" /> Market Mood</div>
-              <div className="space-y-2">
-                {indices.map((q) => (
-                  <Link
-                    key={q.symbol}
-                    to="/stock/$symbol"
-                    params={{ symbol: q.symbol }}
-                    title="Open chart"
-                    className="flex items-center justify-between rounded-lg hairline bg-surface-1 px-3 py-2 transition hover:ring-1 hover:ring-primary/40"
-                  >
-                    <div className="text-xs">
-                      <div className="font-semibold">{q.symbol}</div>
-                      <div className="text-[10px] text-muted-foreground">{(q.name ?? q.symbol ?? "").replace(/ · .*/, "")}</div>
-                    </div>
-                    <div className="text-right num">
-                      <div className="text-sm font-semibold">{money(q.price)}</div>
-                      <div className={`text-[11px] ${q.changePct >= 0 ? "text-bull" : "text-bear"}`}>{pct(q.changePct)}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
+          {/* ---- Market Mood (indices only — the full quote wall was noise) ---- */}
+          <section className="rounded-2xl glass p-5">
+            <div className="text-sm font-semibold mb-3 flex items-center gap-2"><Gauge className="h-4 w-4 text-violet" /> Market Mood</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {indices.map((q) => (
+                <Link
+                  key={q.symbol}
+                  to="/stock/$symbol"
+                  params={{ symbol: q.symbol }}
+                  title="Open chart"
+                  className="flex items-center justify-between rounded-lg hairline bg-surface-1 px-3 py-2 transition hover:ring-1 hover:ring-primary/40"
+                >
+                  <div className="text-xs">
+                    <div className="font-semibold">{q.symbol}</div>
+                    <div className="text-[10px] text-muted-foreground">{(q.name ?? q.symbol ?? "").replace(/ · .*/, "")}</div>
+                  </div>
+                  <div className="text-right num">
+                    <div className="text-sm font-semibold">{money(q.price)}</div>
+                    <div className={`text-[11px] ${q.changePct >= 0 ? "text-bull" : "text-bear"}`}>{pct(q.changePct)}</div>
+                  </div>
+                </Link>
+              ))}
             </div>
           </section>
 
@@ -504,25 +492,6 @@ function AlertCard({ a, now, owned, onBuy, onSell }: TradeCardProps) {
 
       <TradeButtons owned={owned} onBuy={onBuy} onSell={onSell} />
     </div>
-  );
-}
-
-function QuoteTile({ q }: { q: TsQuote }) {
-  const up = q.changePct >= 0;
-  return (
-    <Link
-      to="/stock/$symbol"
-      params={{ symbol: q.symbol }}
-      title="Open chart"
-      className={`block rounded-lg hairline p-2.5 transition hover:ring-1 hover:ring-primary/40 ${up ? "bg-bull/5" : "bg-bear/5"}`}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold">{q.symbol}</span>
-        {up ? <TrendingUp className="h-3 w-3 text-bull" /> : <TrendingDown className="h-3 w-3 text-bear" />}
-      </div>
-      <div className="text-sm font-semibold num mt-0.5">{money(q.price)}</div>
-      <div className={`text-[10px] num ${up ? "text-bull" : "text-bear"}`}>{pct(q.changePct)}</div>
-    </Link>
   );
 }
 
