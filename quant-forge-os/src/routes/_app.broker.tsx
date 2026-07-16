@@ -189,23 +189,26 @@ function Broker() {
             <Health label="Order Router" status={connected ? "OK" : "ERR"} ok={!!connected} />
           </div>
 
-          <div className="mt-5 flex items-center justify-between rounded-xl hairline bg-surface-1 p-3">
-            <div>
+          <div className="mt-5 flex items-center justify-between gap-3 rounded-xl hairline bg-surface-1 p-3">
+            <div className="min-w-0">
               <div className="text-sm font-medium">{isPaper ? "Paper Account" : "Live Trading"}</div>
               <div className="text-[11px] text-muted-foreground">
                 {!paperConfigured
-                  ? "Set VITE_IBKR_PAPER_ACCOUNT_ID to enable paper mode"
+                  ? "Real money — orders execute on IBKR. (No paper account linked.)"
                   : isPaper
                     ? "Uses your paper account — the gateway must be logged into it"
                     : "Real money — orders execute on IBKR"}
               </div>
             </div>
-            <button
-              onClick={() => { setIsPaper(!isPaper); qc.invalidateQueries(); }}
-              disabled={!paperConfigured}
-              className={`relative h-6 w-11 rounded-full transition disabled:opacity-40 disabled:cursor-not-allowed ${isPaper ? "bg-warn" : "bg-bull glow-bull"}`}>
-              <span className="absolute top-0.5 h-5 w-5 rounded-full bg-background transition" style={{ left: isPaper ? 2 : 22 }} />
-            </button>
+            {paperConfigured ? (
+              <button
+                onClick={() => { setIsPaper(!isPaper); qc.invalidateQueries(); }}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition ${isPaper ? "bg-warn" : "bg-bull glow-bull"}`}>
+                <span className="absolute top-0.5 h-5 w-5 rounded-full bg-background transition" style={{ left: isPaper ? 2 : 22 }} />
+              </button>
+            ) : (
+              <span className="shrink-0 rounded-md bg-bull/15 text-bull text-[10px] font-bold px-2 py-1">LIVE</span>
+            )}
           </div>
 
           {!connected && (

@@ -43,6 +43,23 @@ const COLLAPSE_KEY = "nova_sidebar_collapsed";
 const PEEK_HIDE_MS = 600;   // hide this long after the pointer leaves
 const PEEK_MAX_MS = 5000;   // safety: an idle peek closes itself after 5s
 
+function BottomTab({ to, label, icon: Icon }: { to: string; label: string; icon: any }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const active = pathname === to;
+  return (
+    <Link
+      to={to}
+      className={cn(
+        "flex flex-col items-center justify-center gap-1 transition",
+        active ? "text-primary" : "text-muted-foreground",
+      )}
+    >
+      <Icon className={cn("h-5 w-5", active && "drop-shadow")} />
+      <span className="text-[10px] font-medium">{label}</span>
+    </Link>
+  );
+}
+
 function Item({ to, label, icon: Icon, onNavigate }: { to: string; label: string; icon: any; onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const active = pathname === to;
@@ -190,16 +207,25 @@ export function AppSidebar() {
         </aside>
       )}
 
-      {/* ---- Mobile: floating menu button ---- */}
-      {!mobileOpen && (
-        <button
-          onClick={() => setMobileOpen(true)}
-          title="Menu"
-          className="md:hidden fixed bottom-4 left-4 z-50 h-12 w-12 rounded-full gradient-primary glow-primary grid place-items-center text-background"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      )}
+      {/* ---- Mobile: bottom navigation — the 4 most-used pages + Menu ---- */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 hairline-t bg-[var(--topbar-bg)] backdrop-blur-xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="grid grid-cols-5 h-16">
+          <BottomTab to="/alerts" label="Stocks" icon={BellRing} />
+          <BottomTab to="/fno-alerts" label="F&O" icon={Sparkles} />
+          <BottomTab to="/orders" label="Orders" icon={ListOrdered} />
+          <BottomTab to="/broker" label="Broker" icon={Plug} />
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="flex flex-col items-center justify-center gap-1 text-muted-foreground"
+          >
+            <Menu className="h-5 w-5" />
+            <span className="text-[10px] font-medium">Menu</span>
+          </button>
+        </div>
+      </nav>
 
       {/* ---- Mobile drawer ---- */}
       {mobileOpen && (
