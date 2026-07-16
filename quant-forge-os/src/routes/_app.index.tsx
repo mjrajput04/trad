@@ -1,9 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// The dashboard was removed — land on Positions (a stable IBKR page that
-// renders even when data is still loading or the gateway is offline).
+// Land on AI Stock Alerts — the page the day starts from. (It has its own
+// error boundary + defensive gates, so a bad alert can't blank the app.)
 export const Route = createFileRoute("/_app/")({
   beforeLoad: () => {
-    throw redirect({ to: "/positions" });
+    throw redirect({ to: "/alerts" });
   },
 });
