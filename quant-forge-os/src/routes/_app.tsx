@@ -70,7 +70,8 @@ function AppLayout() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar />
         <Ticker />
-        <main className="flex-1 min-w-0 overflow-x-hidden">
+        {/* pb on mobile keeps the floating menu button from covering content */}
+        <main className="flex-1 min-w-0 overflow-x-hidden pb-24 md:pb-0">
           <RouteErrorBoundary key={pathname}>
             <Outlet />
           </RouteErrorBoundary>

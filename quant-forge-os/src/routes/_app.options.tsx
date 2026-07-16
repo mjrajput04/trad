@@ -187,6 +187,9 @@ function OptionsPage() {
         <div className="rounded-2xl glass p-10 text-center text-sm text-muted-foreground">No strikes for this month.</div>
       ) : (
         <div className="rounded-2xl glass overflow-hidden">
+          {/* horizontal scroll on narrow screens so the 9-column ladder stays readable */}
+          <div className="overflow-x-auto scrollbar-thin">
+          <div className="min-w-[640px]">
           <div className="grid grid-cols-9 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground hairline-b bg-surface-1/60 text-center">
             <div className="col-span-4 text-bull font-bold">CALLS</div>
             <div>Strike</div>
@@ -226,6 +229,8 @@ function OptionsPage() {
             {contractsLoading && expiries.length === 0
               ? <><Loader2 className="h-3 w-3 animate-spin" /> resolving contracts…</>
               : <>Live from IBKR · greeks: Δ delta · quotes tick every ~1s · 1 contract = 100 shares</>}
+          </div>
+          </div>
           </div>
         </div>
       )}

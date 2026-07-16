@@ -77,17 +77,19 @@ export function Topbar() {
   const initials = (email.split("@")[0] || "U").slice(0, 2).toUpperCase();
 
   return (
-    <header className="h-14 hairline-b flex items-center gap-4 px-5 bg-[var(--topbar-bg)] backdrop-blur-xl sticky top-0 z-30">
-      <div className="flex items-center gap-2">
-        <div className={`flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+    <header className="h-14 hairline-b flex items-center gap-2 md:gap-4 px-3 md:px-5 bg-[var(--topbar-bg)] backdrop-blur-xl sticky top-0 z-30">
+      <div className="flex items-center gap-2 shrink-0">
+        <div className={`flex items-center gap-1.5 md:gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${
           isMarketOpen
             ? 'bg-bull/10 text-bull'
             : 'bg-bear/10 text-bear'
         }`}>
           <LiveDot />
-          Market {isMarketOpen ? 'Open' : 'Closed'}
+          <span className="hidden sm:inline">Market </span>{isMarketOpen ? 'Open' : 'Closed'}
         </div>
-        <div className="text-xs text-muted-foreground num">{date} · {time} ET</div>
+        {/* full date+time only where there's room; wrapping this looked broken on phones */}
+        <div className="hidden lg:block text-xs text-muted-foreground num whitespace-nowrap">{date} · {time} ET</div>
+        <div className="hidden md:block lg:hidden text-xs text-muted-foreground num whitespace-nowrap">{time} ET</div>
       </div>
 
       {/* Search Bar */}
@@ -115,6 +117,21 @@ export function Topbar() {
           {reviving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug2 className="h-3.5 w-3.5" />}
           <span>{ibkrOk ? 'IBKR Connected' : reviving ? 'Reconnecting…' : 'IBKR Reconnect'}</span>
           <LiveDot />
+        </button>
+
+        {/* compact IBKR status for phones (the full button is md+ only) */}
+        <button
+          onClick={() => {
+            if (ibkrOk) navigate({ to: "/broker" });
+            else reviveOrLogin();
+          }}
+          disabled={reviving}
+          title={ibkrOk ? "IBKR connected" : "Tap to reconnect IBKR"}
+          className={`md:hidden h-9 w-9 grid place-items-center rounded-lg hairline transition disabled:opacity-60 ${
+            ibkrOk ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
+          }`}
+        >
+          {reviving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug2 className="h-4 w-4" />}
         </button>
 
         <button

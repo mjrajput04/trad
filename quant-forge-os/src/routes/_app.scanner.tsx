@@ -121,6 +121,9 @@ function ScannerPage() {
           </span>
         </div>
 
+        {/* horizontal scroll on narrow screens so columns never collide */}
+        <div className="overflow-x-auto scrollbar-thin">
+        <div className="min-w-[560px]">
         <div className="grid grid-cols-12 px-3 py-2 text-[11px] uppercase tracking-wider text-muted-foreground hairline-b">
           <div className="col-span-2">Symbol</div>
           <div className="col-span-4">Trigger</div>
@@ -156,6 +159,8 @@ function ScannerPage() {
             ))}
           </div>
         )}
+        </div>
+        </div>
       </div>
     </div>
   );

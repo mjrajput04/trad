@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash: dark background + dark icon plate instead of
+         the default white flash. -->
+    <style name="LauncherTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/novaBackground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/novaBackground</item>
+    </style>
+</resources>

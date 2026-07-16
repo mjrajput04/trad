@@ -158,9 +158,10 @@ export function SymbolSearch() {
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={handleInputFocus}
           placeholder="Search any US stock symbol…"
-          className="w-full h-9 pl-9 pr-16 rounded-lg bg-surface-1 hairline text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="w-full h-9 pl-9 pr-3 md:pr-16 rounded-lg bg-surface-1 hairline text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
         />
-        <kbd className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground hairline">
+        {/* keyboard hint is meaningless on touch devices */}
+        <kbd className="hidden md:inline-flex absolute right-2 top-1/2 -translate-y-1/2 items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground hairline">
           <Command className="h-3 w-3" /> K
         </kbd>
       </div>

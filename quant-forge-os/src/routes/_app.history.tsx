@@ -79,26 +79,31 @@ function History() {
                   <div className="text-sm font-semibold">{dayLabel(dayTrades[0].time)}</div>
                   <div className="text-[11px] text-muted-foreground num">{dayTrades.length} trades · ${fmtMoney(dayGross, 0)}</div>
                 </div>
-                <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground hairline-b">
-                  <div className="col-span-2">Time</div>
-                  <div className="col-span-3">Symbol</div>
-                  <div className="col-span-2">Side</div>
-                  <div className="col-span-1 text-right">Qty</div>
-                  <div className="col-span-2 text-right">Price</div>
-                  <div className="col-span-2 text-right">Value</div>
-                </div>
-                {dayTrades.map((t) => (
-                  <div key={t.executionId} className="grid grid-cols-12 items-center px-4 py-2.5 hairline-b last:border-0 hover:bg-surface-2 transition text-sm">
-                    <div className="col-span-2 text-xs text-muted-foreground num">{timeLabel(t.time)}</div>
-                    <div className="col-span-3 font-semibold">{t.symbol}</div>
-                    <div className="col-span-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${t.side === "BUY" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{t.side}</span>
+                {/* horizontal scroll on narrow screens so columns never collide */}
+                <div className="overflow-x-auto scrollbar-thin">
+                  <div className="min-w-[560px]">
+                    <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground hairline-b">
+                      <div className="col-span-2">Time</div>
+                      <div className="col-span-3">Symbol</div>
+                      <div className="col-span-2">Side</div>
+                      <div className="col-span-1 text-right">Qty</div>
+                      <div className="col-span-2 text-right">Price</div>
+                      <div className="col-span-2 text-right">Value</div>
                     </div>
-                    <div className="col-span-1 text-right num">{t.quantity}</div>
-                    <div className="col-span-2 text-right num">${fmtMoney(t.price)}</div>
-                    <div className="col-span-2 text-right num text-muted-foreground">${fmtMoney(Math.abs(t.netAmount || t.price * t.quantity))}</div>
+                    {dayTrades.map((t) => (
+                      <div key={t.executionId} className="grid grid-cols-12 items-center px-4 py-2.5 hairline-b last:border-0 hover:bg-surface-2 transition text-sm">
+                        <div className="col-span-2 text-xs text-muted-foreground num whitespace-nowrap">{timeLabel(t.time)}</div>
+                        <div className="col-span-3 font-semibold">{t.symbol}</div>
+                        <div className="col-span-2">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${t.side === "BUY" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{t.side}</span>
+                        </div>
+                        <div className="col-span-1 text-right num">{t.quantity}</div>
+                        <div className="col-span-2 text-right num whitespace-nowrap">${fmtMoney(t.price)}</div>
+                        <div className="col-span-2 text-right num text-muted-foreground whitespace-nowrap">${fmtMoney(Math.abs(t.netAmount || t.price * t.quantity))}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             );
           })}

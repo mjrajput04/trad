@@ -274,6 +274,9 @@ function WatchlistPage() {
         </div>
       ) : (
         <div className="rounded-2xl glass overflow-hidden">
+          {/* horizontal scroll on narrow screens so columns never collide */}
+          <div className="overflow-x-auto scrollbar-thin">
+          <div className="min-w-[640px]">
           <div className="grid grid-cols-12 px-4 py-3 text-[11px] uppercase tracking-wider text-muted-foreground hairline-b">
             <div className="col-span-1"></div>
             <div className="col-span-3">Symbol</div>
@@ -323,6 +326,8 @@ function WatchlistPage() {
                 </div>
               );
             })}
+          </div>
+          </div>
           </div>
         </div>
       )}

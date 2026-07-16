@@ -66,6 +66,9 @@ function Orders() {
         <div className="rounded-2xl glass p-10 text-center text-muted-foreground text-sm">No {tab.toLowerCase()} orders</div>
       ) : (
         <div className="rounded-2xl glass overflow-hidden">
+          {/* horizontal scroll on narrow screens so columns never collide */}
+          <div className="overflow-x-auto scrollbar-thin">
+          <div className="min-w-[760px]">
           <div className="grid grid-cols-12 px-4 py-3 text-[11px] uppercase tracking-wider text-muted-foreground hairline-b">
             <div className="col-span-1">Time</div>
             <div className="col-span-2">Symbol</div>
@@ -113,6 +116,8 @@ function Orders() {
               </div>
             </div>
           ))}
+          </div>
+          </div>
         </div>
       )}
     </div>

@@ -67,6 +67,9 @@ function Positions() {
         <div className="rounded-2xl glass p-10 text-center text-muted-foreground text-sm">No open positions</div>
       ) : (
         <div className="rounded-2xl glass overflow-hidden">
+          {/* horizontal scroll on narrow screens so columns never collide */}
+          <div className="overflow-x-auto scrollbar-thin">
+          <div className="min-w-[720px]">
           <div className="grid grid-cols-12 px-4 py-3 text-[11px] uppercase tracking-wider text-muted-foreground hairline-b">
             <div className="col-span-2">Symbol</div>
             <div className="col-span-1 text-right">Qty</div>
@@ -105,6 +108,8 @@ function Positions() {
               </div>
             );
           })}
+          </div>
+          </div>
         </div>
       )}
     </div>
