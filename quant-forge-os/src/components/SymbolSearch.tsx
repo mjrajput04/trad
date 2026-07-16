@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, Command, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import { Search, Command, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getQuotes, searchSymbols } from "@/lib/api/ibkr";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
@@ -166,9 +166,9 @@ export function SymbolSearch() {
         </kbd>
       </div>
 
-      {/* Dropdown Results */}
+      {/* Dropdown Results — fixed full-width sheet on phones, anchored below the input on desktop */}
       {isOpen && merged.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-surface-1 rounded-xl hairline shadow-2xl z-50 overflow-hidden">
+        <div className="fixed inset-x-3 top-[4.25rem] sm:absolute sm:inset-x-0 sm:top-full sm:mt-2 bg-surface-1 rounded-xl hairline shadow-2xl z-50 overflow-hidden">
           <div className="p-2 text-xs text-muted-foreground hairline-b bg-surface-2 flex items-center gap-2">
             {query.length > 0
               ? `${merged.length} symbol${merged.length !== 1 ? 's' : ''} found`
@@ -184,41 +184,31 @@ export function SymbolSearch() {
                 <button
                   key={symbol.symbol}
                   onClick={() => handleSelect(symbol.symbol)}
-                  className={`w-full flex items-center justify-between p-3 text-left transition hover:bg-surface-2 ${
+                  className={`w-full grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left transition hover:bg-surface-2 ${
                     isSelected ? "bg-surface-2" : ""
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="h-8 w-8 rounded-md bg-surface-2 hairline grid place-items-center text-[10px] font-bold">
-                      {symbol.symbol.slice(0, 2)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{symbol.symbol}</span>
-                        {/* sector chip needs room — desktop only */}
-                        <span className="hidden sm:inline text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 truncate max-w-[140px]">
-                          {symbol.sector}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate">{symbol.name}</div>
-                    </div>
+                  <div className="h-8 w-8 rounded-md bg-surface-2 hairline grid place-items-center text-[10px] font-bold">
+                    {symbol.symbol.slice(0, 2)}
                   </div>
-
-                  {symbol.hasMarketData && symbol.price > 0 && (
-                    <div className="flex items-center gap-3 text-right">
-                      <div>
-                        <div className="text-sm font-semibold num">${fmtMoney(symbol.price)}</div>
-                        <Delta value={symbol.changePct} />
-                      </div>
-                      {up ? (
-                        <TrendingUp className="h-4 w-4 text-bull" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-bear" />
-                      )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-semibold text-sm shrink-0">{symbol.symbol}</span>
+                      {/* sector chip needs room — desktop only */}
+                      <span className="hidden sm:inline text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 truncate">
+                        {symbol.sector}
+                      </span>
                     </div>
-                  )}
-
-                  {!symbol.hasMarketData && (
+                    <div className="text-xs text-muted-foreground truncate">{symbol.name}</div>
+                  </div>
+                  {symbol.hasMarketData && symbol.price > 0 ? (
+                    <div className="text-right shrink-0">
+                      <div className={`text-sm font-semibold num whitespace-nowrap ${up ? "text-bull" : "text-bear"}`}>
+                        ${fmtMoney(symbol.price)}
+                      </div>
+                      <Delta value={symbol.changePct} />
+                    </div>
+                  ) : (
                     <div className="hidden sm:block text-xs text-muted-foreground shrink-0">
                       Click to view
                     </div>
@@ -237,7 +227,7 @@ export function SymbolSearch() {
 
       {/* No Results */}
       {isOpen && query.length > 0 && merged.length === 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-surface-1 rounded-xl hairline shadow-2xl z-50 p-6 text-center">
+        <div className="fixed inset-x-3 top-[4.25rem] sm:absolute sm:inset-x-0 sm:top-full sm:mt-2 bg-surface-1 rounded-xl hairline shadow-2xl z-50 p-6 text-center">
           <div className="text-muted-foreground">
             {searching ? (
               <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin" />
