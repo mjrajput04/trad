@@ -195,7 +195,8 @@ export function SymbolSearch() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm">{symbol.symbol}</span>
-                        <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3">
+                        {/* sector chip needs room — desktop only */}
+                        <span className="hidden sm:inline text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 truncate max-w-[140px]">
                           {symbol.sector}
                         </span>
                       </div>
@@ -218,7 +219,7 @@ export function SymbolSearch() {
                   )}
 
                   {!symbol.hasMarketData && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="hidden sm:block text-xs text-muted-foreground shrink-0">
                       Click to view
                     </div>
                   )}
@@ -227,7 +228,7 @@ export function SymbolSearch() {
             })}
           </div>
 
-          <div className="p-2 text-xs text-muted-foreground hairline-t bg-surface-2 flex items-center justify-between">
+          <div className="hidden md:flex p-2 text-xs text-muted-foreground hairline-t bg-surface-2 items-center justify-between">
             <span>{query.length > 0 ? "Use ↑↓ to navigate, Enter to select" : "Click any symbol or start typing to search"}</span>
             <span className="text-primary">ESC to close</span>
           </div>

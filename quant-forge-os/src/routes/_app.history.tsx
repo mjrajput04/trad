@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, History as HistoryIcon } from "lucide-react";
-import { getTrades } from "@/lib/api/ibkr";
+import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_app/history")({
@@ -20,8 +20,10 @@ const timeLabel = (t: number) =>
 
 function History() {
   const { data: trades = [], isLoading, isError, error } = useQuery({
-    queryKey: ["ibkr-trades-history"],
-    queryFn: () => getTrades(7),
+    // IBKR's week of executions gets archived into our own DB on every load,
+    // so this returns ALL-TIME history, not just 7 days.
+    queryKey: ["trades-all-time"],
+    queryFn: getTradesAllTime,
     refetchInterval: 30_000,
   });
 
@@ -45,7 +47,8 @@ function History() {
           <HistoryIcon className="h-5 w-5 text-info" /> Trade History
         </h1>
         <p className="text-sm text-muted-foreground">
-          Your executed IBKR trades — last 7 days (the maximum the IBKR Client Portal exposes directly).
+          All your executed IBKR trades — auto-archived to your own database every time the app loads
+          (IBKR itself only keeps ~7 days).
         </p>
       </div>
 

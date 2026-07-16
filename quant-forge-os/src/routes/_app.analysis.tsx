@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, BarChart3, Loader2, Trophy, TrendingDown } from "lucide-react";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getAccountSummary, getPositions, getTrades, type Trade } from "@/lib/api/ibkr";
+import { getAccountSummary, getPositions, type Trade } from "@/lib/api/ibkr";
+import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
 
 export const Route = createFileRoute("/_app/analysis")({
@@ -97,8 +98,9 @@ function computeRealized(trades: Trade[]) {
 
 function Analysis() {
   const { data: trades = [], isLoading, isError, error } = useQuery({
-    queryKey: ["ibkr-trades-history"],
-    queryFn: () => getTrades(7),
+    // Full archived history (our DB) + IBKR's live week — not just 7 days.
+    queryKey: ["trades-all-time"],
+    queryFn: getTradesAllTime,
     refetchInterval: 60_000,
   });
   const { data: positions = [] } = useQuery({
@@ -132,7 +134,7 @@ function Analysis() {
           <BarChart3 className="h-5 w-5 text-info" /> P&L Analysis
         </h1>
         <p className="text-sm text-muted-foreground">
-          Where your profit and loss actually came from — closed round-trips from the last 7 days (all IBKR keeps) plus your open positions.
+          Where your profit and loss actually came from — closed round-trips from your FULL archived history plus your open positions.
         </p>
       </div>
 
@@ -210,7 +212,7 @@ function Analysis() {
             <div className="text-sm font-semibold mb-1">Realized P&L by Stock (7d)</div>
             <p className="text-[11px] text-muted-foreground mb-3">Only round-trips (buy AND sell inside the window) are counted — no guessed numbers.</p>
             {symbols.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground text-sm">No closed round-trips in the last 7 days.</div>
+              <div className="py-8 text-center text-muted-foreground text-sm">No closed round-trips yet.</div>
             ) : (
               <div className="space-y-1.5">
                 {symbols.map((s) => {
