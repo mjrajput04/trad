@@ -93,7 +93,9 @@ function computeRealized(trades: Trade[]) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, v]) => ({ label: dayLabel(v.t), pnl: Number(v.pnl.toFixed(2)) }));
   symbols.sort((a, b) => b.realized - a.realized);
-  return { symbols, daily, wins, losses };
+  // realized P&L per calendar day, keyed by YYYY-MM-DD (for "today" views)
+  const byDayKey = new Map([...byDay.entries()].map(([k, v]) => [k, v.pnl]));
+  return { symbols, daily, wins, losses, byDayKey };
 }
 
 function Analysis() {
@@ -115,14 +117,22 @@ function Analysis() {
     refetchInterval: 30_000,
   });
 
-  const { symbols, daily, wins, losses } = computeRealized(trades);
-  const realized7d = symbols.reduce((a, s) => a + s.realized, 0);
+  const { symbols, daily, wins, losses, byDayKey } = computeRealized(trades);
+  const realizedTotal = symbols.reduce((a, s) => a + s.realized, 0);
   const commissions = trades.reduce((a, t) => a + Math.abs(t.commission || 0), 0);
   const unrealized = positions.reduce((a, p) => a + (p.pnl || 0), 0);
   const trips = wins + losses;
   const winRate = trips > 0 ? (wins / trips) * 100 : null;
   const best = symbols[0];
   const worst = symbols.length > 1 ? symbols[symbols.length - 1] : null;
+
+  // ---- Today only ----
+  const todayKey = dayKey(Date.now());
+  const todayTrades = trades.filter((t) => dayKey(t.time) === todayKey).sort((a, b) => b.time - a.time);
+  const todayBuys = todayTrades.filter((t) => t.side === "BUY").length;
+  const todayCommission = todayTrades.reduce((a, t) => a + Math.abs(t.commission || 0), 0);
+  const todayGross = todayTrades.reduce((a, t) => a + Math.abs(t.netAmount || t.price * t.quantity), 0);
+  const todayRealized = byDayKey.get(todayKey) ?? 0;
 
   const maxAbsSym = Math.max(1, ...symbols.map((s) => Math.abs(s.realized)));
   const maxAbsPos = Math.max(1, ...positions.map((p) => Math.abs(p.pnl || 0)));
@@ -138,12 +148,60 @@ function Analysis() {
         </p>
       </div>
 
-      {/* ---- Stat tiles ---- */}
+      {/* ---- TODAY'S SESSION — same-day only ---- */}
+      <section className="rounded-2xl glass p-5 border border-info/20">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-info" /> Today's Session
+          </div>
+          <span className="text-[11px] text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</span>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <Tile label="Trades today" value={String(todayTrades.length)} tone="muted" sub={`${todayBuys} buys · ${todayTrades.length - todayBuys} sells`} />
+          <Tile label="Realized P&L today" value={signed(todayRealized)} tone={todayRealized >= 0 ? "bull" : "bear"} sub="closed round-trips" />
+          <Tile label="Commissions today" value={`$${fmtMoney(todayCommission)}`} tone="muted" sub="deducted by IBKR" />
+          <Tile label="Gross traded today" value={`$${fmtMoney(todayGross, 0)}`} tone="muted" sub="buy + sell value" />
+        </div>
+        {todayTrades.length === 0 ? (
+          <div className="text-center text-xs text-muted-foreground py-3">No executions yet today.</div>
+        ) : (
+          <div className="overflow-x-auto scrollbar-thin rounded-xl hairline">
+            <div className="min-w-[620px]">
+              <div className="grid grid-cols-12 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground hairline-b bg-surface-1/60">
+                <div className="col-span-2">Time</div>
+                <div className="col-span-2">Symbol</div>
+                <div className="col-span-1">Side</div>
+                <div className="col-span-2 text-right">Qty</div>
+                <div className="col-span-2 text-right">Price</div>
+                <div className="col-span-1 text-right">Comm.</div>
+                <div className="col-span-2 text-right">Value</div>
+              </div>
+              {todayTrades.map((t) => (
+                <div key={t.executionId} className="grid grid-cols-12 items-center px-3 py-2 hairline-b last:border-0 text-sm">
+                  <div className="col-span-2 text-xs text-muted-foreground num whitespace-nowrap">
+                    {new Date(t.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                  <div className="col-span-2 font-semibold">{t.symbol}</div>
+                  <div className="col-span-1">
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${t.side === "BUY" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{t.side}</span>
+                  </div>
+                  <div className="col-span-2 text-right num">{t.quantity}</div>
+                  <div className="col-span-2 text-right num whitespace-nowrap">${fmtMoney(t.price)}</div>
+                  <div className="col-span-1 text-right num text-warn whitespace-nowrap">${fmtMoney(Math.abs(t.commission || 0))}</div>
+                  <div className="col-span-2 text-right num text-muted-foreground whitespace-nowrap">${fmtMoney(Math.abs(t.netAmount || t.price * t.quantity), 0)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ---- Stat tiles (all-time archive) ---- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile label="Realized P&L (7d)" value={signed(realized7d)} tone={realized7d >= 0 ? "bull" : "bear"} sub={`${trips} closed trip${trips === 1 ? "" : "s"}`} />
+        <Tile label="Realized P&L (all time)" value={signed(realizedTotal)} tone={realizedTotal >= 0 ? "bull" : "bear"} sub={`${trips} closed trip${trips === 1 ? "" : "s"}`} />
         <Tile label="Unrealized P&L (open)" value={signed(unrealized)} tone={unrealized >= 0 ? "bull" : "bear"} sub={`${positions.length} open position${positions.length === 1 ? "" : "s"}`} />
-        <Tile label="Win rate (7d)" value={winRate != null ? `${winRate.toFixed(0)}%` : "—"} tone={winRate != null && winRate >= 50 ? "bull" : "muted"} sub={trips > 0 ? `${wins}W · ${losses}L` : "no closed trades yet"} />
-        <Tile label="Commissions (7d)" value={`$${fmtMoney(commissions)}`} tone="muted" sub="deducted by IBKR" />
+        <Tile label="Win rate" value={winRate != null ? `${winRate.toFixed(0)}%` : "—"} tone={winRate != null && winRate >= 50 ? "bull" : "muted"} sub={trips > 0 ? `${wins}W · ${losses}L` : "no closed trades yet"} />
+        <Tile label="Commissions (all time)" value={`$${fmtMoney(commissions)}`} tone="muted" sub="deducted by IBKR" />
       </div>
 
       {isLoading ? (
@@ -163,7 +221,7 @@ function Analysis() {
                 <div className="rounded-2xl glass p-4 flex items-center gap-3">
                   <div className="h-9 w-9 rounded-lg bg-bull/15 grid place-items-center"><Trophy className="h-4 w-4 text-bull" /></div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Best trade (7d)</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Best trade (all time)</div>
                     <div className="text-sm font-semibold">{best.symbol} <span className="num text-bull">{signed(best.realized)}</span></div>
                   </div>
                 </div>
@@ -172,7 +230,7 @@ function Analysis() {
                 <div className="rounded-2xl glass p-4 flex items-center gap-3">
                   <div className="h-9 w-9 rounded-lg bg-bear/15 grid place-items-center"><TrendingDown className="h-4 w-4 text-bear" /></div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Worst trade (7d)</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Worst trade (all time)</div>
                     <div className="text-sm font-semibold">{worst.symbol} <span className="num text-bear">{signed(worst.realized)}</span></div>
                   </div>
                 </div>
@@ -209,7 +267,7 @@ function Analysis() {
 
           {/* ---- Realized P&L per symbol ---- */}
           <div className="rounded-2xl glass p-5">
-            <div className="text-sm font-semibold mb-1">Realized P&L by Stock (7d)</div>
+            <div className="text-sm font-semibold mb-1">Realized P&L by Stock (all time)</div>
             <p className="text-[11px] text-muted-foreground mb-3">Only round-trips (buy AND sell inside the window) are counted — no guessed numbers.</p>
             {symbols.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground text-sm">No closed round-trips yet.</div>
