@@ -163,6 +163,18 @@ function Alerts() {
       }, {})
   );
 
+  // GUARANTEE: any live stock position ALWAYS has a card here, even when the
+  // engine has no alert data for it (closed[] only keeps the last few and is
+  // wiped on engine restarts — that must never hide a real position).
+  const cardSyms = new Set([...alerts.map((a) => a.symbol), ...heldClosed.map((a) => a.symbol)]);
+  const bareHoldings = positions.filter(
+    (p) =>
+      p.quantity > 0 &&
+      p.assetClass === "STK" &&
+      !cardSyms.has(p.symbol) &&
+      !INVERSE_ETFS.some((e) => e.symbol === p.symbol)
+  );
+
   const rawBest = data?.bestTrade;
   // Best Trade must pass the same gate; otherwise promote the top working alert.
   const bestTrade = valid(rawBest) && working(rawBest) ? rawBest : (alerts[0] ?? null);
@@ -302,10 +314,10 @@ function Alerts() {
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold">Buy Alerts</h2>
               <span className="text-[11px] text-muted-foreground">
-                {alerts.length} working{heldClosed.length > 0 && <> · {heldClosed.length} holding</>}
+                {alerts.length} working{(heldClosed.length + bareHoldings.length) > 0 && <> · {heldClosed.length + bareHoldings.length} holding</>}
               </span>
             </div>
-            {alerts.length === 0 && heldClosed.length === 0 ? (
+            {alerts.length === 0 && heldClosed.length === 0 && bareHoldings.length === 0 ? (
               <div className="rounded-2xl glass p-8 text-center text-muted-foreground text-sm">
                 No strong setups right now. Quality over quantity — new ones appear as soon as they qualify.
               </div>
@@ -319,6 +331,15 @@ function Alerts() {
                     owned={ownedBySym.get(a.symbol) ?? 0}
                     onBuy={() => openBuy(a)}
                     onSell={() => openSell(a.symbol)}
+                  />
+                ))}
+                {bareHoldings.map((p) => (
+                  <HoldingCard
+                    key={p.conid}
+                    p={p}
+                    now={nowPrice(p.symbol)}
+                    onBuy={() => setTrade({ symbol: p.symbol, side: "BUY" })}
+                    onSell={() => openSell(p.symbol)}
                   />
                 ))}
               </div>
@@ -364,6 +385,41 @@ function Alerts() {
           onClose={() => setTrade(null)}
         />
       )}
+    </div>
+  );
+}
+
+// Card for a live position that has NO alert data — position itself is the
+// source of truth: avg cost, live price, P&L, and the Buy/Sell buttons.
+function HoldingCard({ p, now, onBuy, onSell }: {
+  p: { symbol: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number; pnlPct: number };
+  now?: number;
+  onBuy: () => void;
+  onSell: () => void;
+}) {
+  const live = now ?? p.currentPrice ?? 0;
+  const up = (p.pnl ?? 0) >= 0;
+  return (
+    <div className="rounded-2xl glass p-4 flex flex-col gap-3 border border-info/25">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Link to="/stock/$symbol" params={{ symbol: p.symbol }} className="text-lg font-bold hover:text-primary transition" title="Open chart">
+            {p.symbol}
+          </Link>
+          <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {p.quantity}</span>
+        </div>
+        <span className={`text-xs num font-semibold ${up ? "text-bull" : "text-bear"}`}>
+          {up ? "+" : ""}${fmtMoney(p.pnl ?? 0)} ({pct(p.pnlPct)})
+        </span>
+      </div>
+      <div className="flex gap-2">
+        <Level label="Avg Cost" value={p.entryPrice} tone="info" />
+        <Level label="Now" value={live} tone={up ? "bull" : "bear"} />
+      </div>
+      <div className="text-[11px] text-muted-foreground">
+        Your live IBKR position — no active alert on this symbol right now.
+      </div>
+      <TradeButtons owned={p.quantity} onBuy={onBuy} onSell={onSell} />
     </div>
   );
 }
