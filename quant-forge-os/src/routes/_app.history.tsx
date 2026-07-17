@@ -9,14 +9,14 @@ export const Route = createFileRoute("/_app/history")({
   component: History,
 });
 
-const dayKey = (t: number) => {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+// Trading days/times are US/Eastern — grouping by the viewer's IST clock
+// split one US session across two days.
+const dayKey = (t: number) =>
+  new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD
 const dayLabel = (t: number) =>
-  new Date(t).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  new Date(t).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
 const timeLabel = (t: number) =>
-  t ? new Date(t).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
+  t ? `${new Date(t).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "America/New_York" })} ET` : "—";
 
 function History() {
   const { data: trades = [], isLoading, isError, error } = useQuery({

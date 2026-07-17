@@ -100,7 +100,10 @@ app.use('/', ibkrProxy);
 // if the brokerage session went idle, revive it (ssodh/init + reauthenticate).
 // The session then lasts until IBKR's own SSO expiry (~daily), which is the one
 // thing that still needs a human login at backend.nassphx.com.
-const GW = 'http://localhost:7175/v1/api';
+// NOTE: goes through THIS proxy (not raw :7175) — the gateway rejects some
+// direct localhost calls (tickle/auth-status return Akamai "Bad Request") but
+// accepts them with the proxy's header handling.
+const GW = `http://127.0.0.1:${PORT}/v1/api`;
 
 async function gw(path, body) {
   const res = await fetch(`${GW}${path}`, {
@@ -147,11 +150,11 @@ async function keepalive() {
   }
 }
 setInterval(keepalive, 60_000);
-keepalive();
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 IBKR Proxy Server running on port ${PORT}`);
   console.log(`📡 Proxying requests to IBKR Gateway at localhost:7175`);
+  keepalive(); // first ping once we can route through ourselves
 });
 
 // Proxy websocket upgrades too (market-data streaming)

@@ -33,7 +33,10 @@ const {
   GMAIL_USER, GMAIL_APP_PASS,
 } = process.env;
 const ALERT_EMAIL = process.env.ALERT_EMAIL || "nassphx@gmail.com";
-const GW = "http://127.0.0.1:7175/v1/api";
+// IMPORTANT: go through the ibkr-proxy (8002), NOT the raw gateway (7175) —
+// several gateway endpoints reject direct localhost calls (Akamai "Bad
+// Request" HTML) but work fine through the proxy's header handling.
+const GW = "http://127.0.0.1:8002/v1/api";
 const TS = "http://127.0.0.1:3100/api";
 const UA = { "User-Agent": "nova-mailer" };
 
@@ -138,10 +141,16 @@ async function pollTrades() {
   let data;
   try {
     const res = await fetch(`${GW}/iserver/account/trades?days=1`, { headers: UA });
-    if (!res.ok) return;
+    if (!res.ok) { console.error("trades poll HTTP", res.status); return; }
     data = await res.json();
   } catch (_) { return; } // gateway down / not authenticated — try next minute
   if (!Array.isArray(data)) return;
+
+  // The no-mail-on-boot flag must be consumed on the first SUCCESSFUL poll —
+  // even an EMPTY one — otherwise a quiet boot leaves it armed and the first
+  // real trade of the day gets silently swallowed.
+  const isFirstPoll = firstTradePoll;
+  firstTradePoll = false;
 
   const seen = new Set(state.seenExecs);
   const fresh = [];
@@ -174,7 +183,7 @@ async function pollTrades() {
   saveState();
 
   // skip the email flood on very first run (whole day marked fresh at boot)
-  if (firstTradePoll) { firstTradePoll = false; return; }
+  if (isFirstPoll) return;
 
   const rowsHtml = fresh.map((f) => `
     <tr>

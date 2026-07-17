@@ -15,11 +15,12 @@ const BULL = "var(--bull)";
 const BEAR = "var(--bear)";
 
 const signed = (n: number) => `${n >= 0 ? "+" : "−"}$${fmtMoney(Math.abs(n))}`;
-const dayKey = (t: number) => {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-const dayLabel = (t: number) => new Date(t).toLocaleDateString("en-US", { weekday: "short", day: "numeric" });
+// Trading days are US/Eastern days — an 11pm ET fill must NOT roll into the
+// next day just because the viewer is in IST.
+const dayKey = (t: number) =>
+  new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD
+const dayLabel = (t: number) =>
+  new Date(t).toLocaleDateString("en-US", { weekday: "short", day: "numeric", timeZone: "America/New_York" });
 
 interface SymbolPnl {
   symbol: string;
@@ -154,7 +155,7 @@ function Analysis() {
           <div className="text-sm font-semibold flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-info" /> Today's Session
           </div>
-          <span className="text-[11px] text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</span>
+          <span className="text-[11px] text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "America/New_York" })} · US market day</span>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <Tile label="Trades today" value={String(todayTrades.length)} tone="muted" sub={`${todayBuys} buys · ${todayTrades.length - todayBuys} sells`} />
@@ -179,7 +180,7 @@ function Analysis() {
               {todayTrades.map((t) => (
                 <div key={t.executionId} className="grid grid-cols-12 items-center px-3 py-2 hairline-b last:border-0 text-sm">
                   <div className="col-span-2 text-xs text-muted-foreground num whitespace-nowrap">
-                    {new Date(t.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(t.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "America/New_York" })} ET
                   </div>
                   <div className="col-span-2 font-semibold">{t.symbol}</div>
                   <div className="col-span-1">
