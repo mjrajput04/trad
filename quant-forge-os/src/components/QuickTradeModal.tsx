@@ -29,13 +29,25 @@ interface Props {
  * (alert levels, 1%-risk position size, owned quantity for sells, trailing
  * stop) but everything stays editable before the order is sent to IBKR.
  */
+// Are we in IBKR's extended session (pre-market 4:00–9:30 or after-hours
+// 16:00–20:00 ET on a weekday)? Regular-hours MKT orders don't work there.
+function inExtendedHours(): boolean {
+  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return (mins >= 4 * 60 && mins < 9 * 60 + 30) || (mins >= 16 * 60 && mins < 20 * 60);
+}
+
 export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defaults, onClose }: Props) {
   const qc = useQueryClient();
   const { isPaper, currentAccount } = useTrading();
+  const [afterHours, setAfterHours] = useState<boolean>(() => inExtendedHours());
 
   const [side, setSide] = useState<"BUY" | "SELL">(initialSide);
   const [qty, setQty] = useState<number>(0);
-  const [type, setType] = useState<"MKT" | "LMT">("MKT");
+  // extended hours accepts LMT only — default accordingly
+  const [type, setType] = useState<"MKT" | "LMT">(() => (inExtendedHours() ? "LMT" : "MKT"));
   const [price, setPrice] = useState<number>(defaults?.price ?? 0);
   const [slMode, setSlMode] = useState<"trail" | "fixed" | "none">(defaults?.stop ? "trail" : "none");
   const [trailPct, setTrailPct] = useState<number>(0);
@@ -94,6 +106,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
       if (side === "SELL" && ownedQty > 0) {
         await cancelWorkingOrders({ symbol }).catch(() => {});
       }
+      if (afterHours && type === "MKT") throw new Error("After-hours ma LIMIT order j chale — LMT select karo");
       return placeOrder({
         symbol,
         side,
@@ -103,6 +116,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
         trailingStopPct: side === "BUY" && slMode === "trail" ? trailPct : undefined,
         stopLoss: side === "BUY" && slMode === "fixed" ? fixedStop : undefined,
         takeProfit: side === "BUY" && tp > 0 ? tp : undefined,
+        outsideRth: afterHours && type === "LMT",
       });
     },
     onSuccess: (result) => {
@@ -168,6 +182,19 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
             <input type="number" min={0} step="0.01" value={price || ""} onChange={(e) => setPrice(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num focus:outline-none" />
           </label>
         )}
+
+        {/* Extended-hours execution (pre-market / after-hours) */}
+        <label className="mb-3 flex items-center gap-2 text-[11px] cursor-pointer rounded-lg hairline bg-surface-1 px-3 py-2">
+          <input
+            type="checkbox"
+            checked={afterHours}
+            onChange={(e) => { setAfterHours(e.target.checked); if (e.target.checked) setType("LMT"); }}
+          />
+          <span>
+            <span className="font-semibold">After-hours execution</span>
+            <span className="text-muted-foreground"> — pre-market 4:00–9:30 / after-hours 16:00–20:00 ET. LIMIT only; liquidity thin che, limit price barabar mukvo.</span>
+          </span>
+        </label>
 
         {side === "BUY" && (
           <>

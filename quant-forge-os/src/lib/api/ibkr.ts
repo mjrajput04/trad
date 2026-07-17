@@ -549,6 +549,9 @@ export interface PlaceOrderParams {
   /** Optional bracket: take-profit limit for the opposite side. */
   takeProfit?: number;
   tif?: "DAY" | "GTC";
+  /** Allow execution outside regular hours (pre/after-market). LMT only —
+   *  IBKR does not accept MKT orders outside RTH. */
+  outsideRth?: boolean;
 }
 
 export async function placeOrder(params: PlaceOrderParams) {
@@ -575,6 +578,7 @@ export async function placeOrder(params: PlaceOrderParams) {
       tif: params.tif ?? "DAY",
       // LMT: price = limit. STP: price = stop trigger.
       ...(orderType !== "MKT" ? { price } : {}),
+      ...(params.outsideRth && orderType === "LMT" ? { outsideRTH: true } : {}),
     },
   ];
 
