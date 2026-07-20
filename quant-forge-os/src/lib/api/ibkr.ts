@@ -124,14 +124,28 @@ async function bootstrapSession(): Promise<boolean> {
 }
 
 let sessionPromise: Promise<boolean> | null = null;
+let lastForcedBootstrapAt = 0;
 
 /** Make sure we have an authenticated brokerage session. */
 export async function ensureSession(force = false): Promise<boolean> {
   if (force) {
-    sessionPromise = null;
-    brokerageReady = false;
-    brokeragePromise = null;
-    reauthTried = false;
+    // FLAP GUARD: with many pollers running (quotes every second, several
+    // pages/devices), ONE transient 401 used to force an ssodh/init — which
+    // itself bounces the session for a moment and 401s every other in-flight
+    // call, which then also forced a re-init… a self-sustaining storm that
+    // made the badge flip red seconds after connecting. Allow at most one
+    // forced re-bootstrap per minute; everyone else rides the current session.
+    const now = Date.now();
+    if (now - lastForcedBootstrapAt < 60_000) {
+      if (sessionPromise) return sessionPromise;
+      // no in-flight bootstrap — fall through as a NON-forced ensure
+    } else {
+      lastForcedBootstrapAt = now;
+      sessionPromise = null;
+      brokerageReady = false;
+      brokeragePromise = null;
+      reauthTried = false;
+    }
   }
   if (!sessionPromise) sessionPromise = bootstrapSession();
   const ok = await sessionPromise;
@@ -150,12 +164,20 @@ let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
 // Tickle, and if the session went idle anyway, revive it in place
 // (ssodh/init + reauthenticate) so the user never has to click reconnect.
+// Two strikes before reviving — a single dropped tickle is normal noise.
+let tickleFails = 0;
 async function pingOrRevive(onRevived?: () => void) {
   try {
     await tickle();
+    tickleFails = 0;
   } catch {
+    tickleFails++;
+    if (tickleFails < 2) return;
     const ok = await ensureSession(true).catch(() => false);
-    if (ok) onRevived?.();
+    if (ok) {
+      tickleFails = 0;
+      onRevived?.();
+    }
   }
 }
 
@@ -173,12 +195,28 @@ export function startSessionKeepalive(onRevived?: () => void) {
   });
 }
 
+// STICKY STATUS: during an ssodh/init the gateway reports unauthenticated for
+// a few seconds even though the session is fine — flipping the whole UI red.
+// Hold the last-known-good status through short blips; a REAL logout persists
+// past the window and shows red ~90s later, which is an acceptable trade.
+let lastAuthOkAt = 0;
 export async function getAuthStatus(): Promise<AuthStatus> {
-  const res = await rawFetch("/iserver/auth/status", { method: "POST" });
-  if (!res.ok) {
-    return { authenticated: false, connected: false, competing: false };
+  const sticky = Date.now() - lastAuthOkAt < 90_000;
+  let st: AuthStatus | null = null;
+  try {
+    const res = await rawFetch("/iserver/auth/status", { method: "POST" });
+    if (res.ok) st = (await res.json()) as AuthStatus;
+  } catch {
+    /* transient network error — treat like a blip */
   }
-  return res.json();
+  if (st?.authenticated) {
+    lastAuthOkAt = Date.now();
+    return st;
+  }
+  if (sticky) {
+    return { ...(st ?? {}), authenticated: true, connected: true, competing: false } as AuthStatus;
+  }
+  return st ?? { authenticated: false, connected: false, competing: false };
 }
 
 // ---------------------------------------------------------------------------
