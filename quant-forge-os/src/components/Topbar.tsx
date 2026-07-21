@@ -67,6 +67,24 @@ export function Topbar() {
   const isWeekday = et ? et.getDay() >= 1 && et.getDay() <= 5 : false;
   const minutes = et ? et.getHours() * 60 + et.getMinutes() : 0;
   const isMarketOpen = isWeekday && minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+  // Full session picture: pre-market 4:00–9:30, RTH, after-hours 16:00–20:00 ET
+  const session: "PRE" | "OPEN" | "AFTER" | "CLOSED" = !isWeekday
+    ? "CLOSED"
+    : isMarketOpen
+      ? "OPEN"
+      : minutes >= 4 * 60 && minutes < 9 * 60 + 30
+        ? "PRE"
+        : minutes >= 16 * 60 && minutes < 20 * 60
+          ? "AFTER"
+          : "CLOSED";
+  const sessionStyle = {
+    OPEN: "bg-bull/10 text-bull",
+    PRE: "bg-warn/10 text-warn",
+    AFTER: "bg-violet/10 text-violet",
+    CLOSED: "bg-bear/10 text-bear",
+  }[session];
+  const sessionLabel = { OPEN: "Market Open", PRE: "Pre-market", AFTER: "After-hours", CLOSED: "Market Closed" }[session];
+  const sessionShort = { OPEN: "Open", PRE: "Pre", AFTER: "AH", CLOSED: "Closed" }[session];
 
   const time = et ? et.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "--:--:--";
   const date = et ? et.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
@@ -79,13 +97,10 @@ export function Topbar() {
   return (
     <header className="h-14 hairline-b flex items-center gap-2 md:gap-4 px-3 md:px-5 bg-[var(--topbar-bg)] backdrop-blur-xl sticky top-0 z-30">
       <div className="flex items-center gap-2 shrink-0">
-        <div className={`flex items-center gap-1.5 md:gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${
-          isMarketOpen
-            ? 'bg-bull/10 text-bull'
-            : 'bg-bear/10 text-bear'
-        }`}>
+        <div className={`flex items-center gap-1.5 md:gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${sessionStyle}`}>
           <LiveDot />
-          <span className="hidden sm:inline">Market </span>{isMarketOpen ? 'Open' : 'Closed'}
+          <span className="hidden sm:inline">{sessionLabel}</span>
+          <span className="sm:hidden">{sessionShort}</span>
         </div>
         {/* full date+time only where there's room; wrapping this looked broken on phones */}
         <div className="hidden lg:block text-xs text-muted-foreground num whitespace-nowrap">{date} · {time} ET</div>
