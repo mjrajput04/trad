@@ -104,7 +104,7 @@ function Analysis() {
     // Full archived history (our DB) + IBKR's live week — not just 7 days.
     queryKey: ["trades-all-time"],
     queryFn: getTradesAllTime,
-    refetchInterval: 60_000,
+    refetchInterval: 15_000, // provisional fills make fresh trades visible in seconds
   });
   const { data: positions = [] } = useQuery({
     queryKey: ["ibkr-positions"],

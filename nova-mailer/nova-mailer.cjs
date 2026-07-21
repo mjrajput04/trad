@@ -140,8 +140,14 @@ async function archiveAll() {
 async function pollTrades() {
   let data;
   try {
-    const res = await fetch(`${GW}/iserver/account/trades?days=1`, { headers: UA });
-    if (!res.ok) { console.error("trades poll HTTP", res.status); return; }
+    let res = await fetch(`${GW}/iserver/account/trades?days=1`, { headers: UA });
+    if (!res.ok) {
+      // the trades endpoint 500s until /iserver/accounts primes the session —
+      // prime and retry once before giving up this cycle
+      await fetch(`${GW}/iserver/accounts`, { headers: UA }).catch(() => {});
+      res = await fetch(`${GW}/iserver/account/trades?days=1`, { headers: UA });
+      if (!res.ok) { console.error("trades poll HTTP", res.status); return; }
+    }
     data = await res.json();
   } catch (_) { return; } // gateway down / not authenticated — try next minute
   if (!Array.isArray(data)) return;

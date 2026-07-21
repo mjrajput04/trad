@@ -526,6 +526,8 @@ export async function getOrders() {
     price: parseIBKRNum(o.price ?? o.auxPrice ?? o.stop_price ?? o.stopPrice ?? o.avgPrice),
     status: mapStatus(o.status),
     rawStatus: o.status,
+    avgPrice: parseIBKRNum(o.avgPrice),
+    timeMs: Number(o.lastExecutionTime_r) || 0,
     time: new Date(o.lastExecutionTime_r ?? Date.now()).toLocaleTimeString(
       "en-US",
       { hour: "2-digit", minute: "2-digit" }

@@ -24,7 +24,7 @@ function History() {
     // so this returns ALL-TIME history, not just 7 days.
     queryKey: ["trades-all-time"],
     queryFn: getTradesAllTime,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000, // provisional fills make fresh trades visible in seconds
   });
 
   const buys = trades.filter((t) => t.side === "BUY").length;

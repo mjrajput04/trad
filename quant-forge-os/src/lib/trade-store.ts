@@ -4,7 +4,7 @@
 // and Analysis then read the full archive instead of just the last week.
 
 import { supabase } from "@/integrations/supabase/client";
-import { getTrades, type Trade } from "./api/ibkr";
+import { getTrades, getOrders, type Trade } from "./api/ibkr";
 
 // The generated Database types predate this table — keep the cast contained here.
 const tradesTable = () => (supabase as any).from("ibkr_trades");
@@ -54,17 +54,52 @@ export async function getArchivedTrades(): Promise<Trade[]> {
 }
 
 /**
+ * IBKR's /iserver/account/trades LAGS several minutes behind reality, but a
+ * FILLED order shows up in /iserver/account/orders within seconds. Surface
+ * filled orders as provisional executions until the real records land — a
+ * provisional row shrinks/disappears as matching real executions arrive.
+ */
+async function getProvisionalFills(real: Trade[]): Promise<Trade[]> {
+  const orders = await getOrders().catch(() => [] as any[]);
+  const out: Trade[] = [];
+  for (const o of orders as any[]) {
+    if (o.status !== "Filled" || !(o.filled > 0)) continue;
+    const t = o.timeMs || Date.now();
+    // real executions already covering this order (same symbol+side, ±45 min)
+    const realQty = real
+      .filter((r) => r.symbol === o.symbol && r.side === o.side && Math.abs(r.time - t) < 45 * 60_000)
+      .reduce((a, r) => a + r.quantity, 0);
+    const remaining = o.filled - realQty;
+    if (remaining <= 0) continue;
+    const px = o.avgPrice || o.price || 0;
+    if (!(px > 0)) continue;
+    out.push({
+      executionId: `ord-${o.orderId}`,
+      symbol: o.symbol,
+      side: o.side,
+      quantity: remaining,
+      price: px,
+      time: t,
+      commission: 0,
+      netAmount: px * remaining,
+      orderRef: "provisional",
+    });
+  }
+  return out;
+}
+
+/**
  * Fetch IBKR's recent executions, archive them, and return the FULL history
- * (archive ∪ live, deduped by execution id, newest first). Falls back to
+ * (archive ∪ live ∪ provisional fills, deduped, newest first). Falls back to
  * whatever side is reachable so the page still renders.
  */
 export async function getTradesAllTime(): Promise<Trade[]> {
   const recent = await getTrades(7).catch(() => [] as Trade[]);
   if (recent.length) await syncTrades(recent).catch(() => 0);
   const archived = await getArchivedTrades().catch(() => [] as Trade[]);
-  if (!archived.length) return recent;
   const seen = new Set(archived.map((t) => t.executionId));
-  return [...archived, ...recent.filter((t) => !seen.has(t.executionId))].sort(
-    (a, b) => b.time - a.time
-  );
+  const merged = [...archived, ...recent.filter((t) => !seen.has(t.executionId))];
+  // instant-visibility layer: filled orders IBKR hasn't reported as trades yet
+  const provisional = await getProvisionalFills(merged).catch(() => [] as Trade[]);
+  return [...provisional, ...merged].sort((a, b) => b.time - a.time);
 }
