@@ -138,6 +138,13 @@ function Analysis() {
   const maxAbsSym = Math.max(1, ...symbols.map((s) => Math.abs(s.realized)));
   const maxAbsPos = Math.max(1, ...positions.map((p) => Math.abs(p.pnl || 0)));
 
+  // The archive only reaches back to when it started collecting (IBKR itself
+  // exposes just ~7 days) — label the window honestly instead of "all time".
+  const firstTradeMs = trades.reduce((a, t) => (t.time > 0 && t.time < a ? t.time : a), Infinity);
+  const sinceLabel = Number.isFinite(firstTradeMs)
+    ? `since ${new Date(firstTradeMs).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}`
+    : "archived";
+
   return (
     <div className="p-6 space-y-5">
       <div>
@@ -199,10 +206,10 @@ function Analysis() {
 
       {/* ---- Stat tiles (all-time archive) ---- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile label="Realized P&L (all time)" value={signed(realizedTotal)} tone={realizedTotal >= 0 ? "bull" : "bear"} sub={`${trips} closed trip${trips === 1 ? "" : "s"}`} />
+        <Tile label={`Realized P&L (${sinceLabel})`} value={signed(realizedTotal)} tone={realizedTotal >= 0 ? "bull" : "bear"} sub={`${trips} trips · net ${signed(realizedTotal - commissions)} after comm.`} />
         <Tile label="Unrealized P&L (open)" value={signed(unrealized)} tone={unrealized >= 0 ? "bull" : "bear"} sub={`${positions.length} open position${positions.length === 1 ? "" : "s"}`} />
         <Tile label="Win rate" value={winRate != null ? `${winRate.toFixed(0)}%` : "—"} tone={winRate != null && winRate >= 50 ? "bull" : "muted"} sub={trips > 0 ? `${wins}W · ${losses}L` : "no closed trades yet"} />
-        <Tile label="Commissions (all time)" value={`$${fmtMoney(commissions)}`} tone="muted" sub="deducted by IBKR" />
+        <Tile label={`Commissions (${sinceLabel})`} value={`$${fmtMoney(commissions)}`} tone="muted" sub="deducted by IBKR" />
       </div>
 
       {isLoading ? (
@@ -222,7 +229,7 @@ function Analysis() {
                 <div className="rounded-2xl glass p-4 flex items-center gap-3">
                   <div className="h-9 w-9 rounded-lg bg-bull/15 grid place-items-center"><Trophy className="h-4 w-4 text-bull" /></div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Best trade (all time)</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Best trade ({sinceLabel})</div>
                     <div className="text-sm font-semibold">{best.symbol} <span className="num text-bull">{signed(best.realized)}</span></div>
                   </div>
                 </div>
@@ -231,7 +238,7 @@ function Analysis() {
                 <div className="rounded-2xl glass p-4 flex items-center gap-3">
                   <div className="h-9 w-9 rounded-lg bg-bear/15 grid place-items-center"><TrendingDown className="h-4 w-4 text-bear" /></div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Worst trade (all time)</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Worst trade ({sinceLabel})</div>
                     <div className="text-sm font-semibold">{worst.symbol} <span className="num text-bear">{signed(worst.realized)}</span></div>
                   </div>
                 </div>
@@ -268,7 +275,7 @@ function Analysis() {
 
           {/* ---- Realized P&L per symbol ---- */}
           <div className="rounded-2xl glass p-5">
-            <div className="text-sm font-semibold mb-1">Realized P&L by Stock (all time)</div>
+            <div className="text-sm font-semibold mb-1">Realized P&L by Stock</div>
             <p className="text-[11px] text-muted-foreground mb-3">Only round-trips (buy AND sell inside the window) are counted — no guessed numbers.</p>
             {symbols.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground text-sm">No closed round-trips yet.</div>
