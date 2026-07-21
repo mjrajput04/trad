@@ -59,15 +59,23 @@ export async function getArchivedTrades(): Promise<Trade[]> {
  * filled orders as provisional executions until the real records land — a
  * provisional row shrinks/disappears as matching real executions arrive.
  */
+const etDay = (t: number) =>
+  new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
 async function getProvisionalFills(real: Trade[]): Promise<Trade[]> {
   const orders = await getOrders().catch(() => [] as any[]);
+  const today = etDay(Date.now());
   const out: Trade[] = [];
   for (const o of orders as any[]) {
     if (o.status !== "Filled" || !(o.filled > 0)) continue;
-    const t = o.timeMs || Date.now();
-    // real executions already covering this order (same symbol+side, ±45 min)
+    // STRICT: only orders with a REAL execution timestamp, and only TODAY's.
+    // (A missing timestamp used to default to "now", which dodged the dedup
+    // window and duplicated old trades in the day's numbers.)
+    const t = Number(o.timeMs) || 0;
+    if (!t || etDay(t) !== today) continue;
+    // real executions already covering this order: same symbol+side, same ET day
     const realQty = real
-      .filter((r) => r.symbol === o.symbol && r.side === o.side && Math.abs(r.time - t) < 45 * 60_000)
+      .filter((r) => r.symbol === o.symbol && r.side === o.side && etDay(r.time) === today)
       .reduce((a, r) => a + r.quantity, 0);
     const remaining = o.filled - realQty;
     if (remaining <= 0) continue;
