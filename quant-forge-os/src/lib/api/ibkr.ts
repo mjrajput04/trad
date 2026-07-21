@@ -458,7 +458,16 @@ export interface Position {
   assetClass: string;
 }
 
+let lastPosInvalidateAt = 0;
+
 export async function getPositions(): Promise<Position[]> {
+  // The gateway CACHES /portfolio positions — a limit order that fills minutes
+  // after placement kept showing the stale lot (old qty/avg). Refresh the
+  // gateway cache at most once a minute so fills propagate quickly.
+  if (Date.now() - lastPosInvalidateAt > 60_000) {
+    lastPosInvalidateAt = Date.now();
+    await invalidatePositionsCache();
+  }
   // The endpoint pages 30 positions at a time; walk pages until one is short.
   const raw: any[] = [];
   for (let page = 0; page < 20; page++) {
