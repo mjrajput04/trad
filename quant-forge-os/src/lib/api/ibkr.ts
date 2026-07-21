@@ -246,6 +246,14 @@ async function ibkr<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text();
+    // After any session re-init the gateway forgets the SELECTED account and
+    // order endpoints 400 with "accountId is not valid" until /iserver/accounts
+    // is fetched again. Re-prime and retry once, invisibly.
+    if (res.status === 400 && text.includes("accountId is not valid")) {
+      await rawFetch("/iserver/accounts").catch(() => {});
+      res = await rawFetch(path, options);
+      if (res.ok) return res.json();
+    }
     if (res.status === 500 && text.includes("not logged in")) {
       sessionPromise = null;
       throw new Error("Not logged in to IBKR. Open the gateway and log in first.");
