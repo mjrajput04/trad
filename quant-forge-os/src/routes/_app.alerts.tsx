@@ -9,7 +9,7 @@ import {
   getTsAlerts, getTsQuotes, getTsBacktest, bracketStop,
   type TsAlert, type TsBacktest,
 } from "@/lib/api/alerts";
-import { getPositions, getQuotes } from "@/lib/api/ibkr";
+import { getPositions, getQuotes, type Position } from "@/lib/api/ibkr";
 import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTradeModal";
 import { Level, LevelBar } from "@/components/TradeLevels";
 import { fmtMoney } from "@/lib/market-data";
@@ -76,6 +76,7 @@ function Alerts() {
     retry: false,
   });
   const ownedBySym = new Map(positions.filter((p) => p.quantity > 0).map((p) => [p.symbol, p.quantity]));
+  const posBySym = new Map(positions.filter((p) => p.quantity > 0).map((p) => [p.symbol, p]));
 
   // Quick-trade popup state (Buy/Sell straight from an alert card).
   const [trade, setTrade] = useState<{ symbol: string; side: "BUY" | "SELL"; defaults?: QuickTradeDefaults } | null>(null);
@@ -219,6 +220,7 @@ function Alerts() {
               a={bestTrade}
               now={nowPrice(bestTrade.symbol)}
               owned={ownedBySym.get(bestTrade.symbol) ?? 0}
+              pos={posBySym.get(bestTrade.symbol)}
               onBuy={() => openBuy(bestTrade)}
               onSell={() => openSell(bestTrade.symbol)}
             />
@@ -277,6 +279,7 @@ function Alerts() {
                             <Level label="Stop" value={stopL} sub="-2.00%" tone="bear" />
                           </div>
                           <LevelBar entry={entry} target={target} stop={stopL} now={now || undefined} />
+                          <YourPosition pos={posBySym.get(e.symbol)} />
                           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>Bearish play · rises when the market falls</span>
                             {now > 0 && <span className="num">Now {money(now)}</span>}
@@ -329,6 +332,7 @@ function Alerts() {
                     a={a}
                     now={nowPrice(a.symbol)}
                     owned={ownedBySym.get(a.symbol) ?? 0}
+                    pos={posBySym.get(a.symbol)}
                     onBuy={() => openBuy(a)}
                     onSell={() => openSell(a.symbol)}
                   />
@@ -451,11 +455,27 @@ interface TradeCardProps {
   a: TsAlert;
   now?: number;
   owned: number;
+  pos?: Position;
   onBuy: () => void;
   onSell: () => void;
 }
 
-function BestTrade({ a, now, owned, onBuy, onSell }: TradeCardProps) {
+// "Your position" strip shown on any card whose symbol you actually hold:
+// YOUR average cost + live P&L, alongside the engine's levels.
+function YourPosition({ pos }: { pos?: Position }) {
+  if (!pos) return null;
+  const up = (pos.pnl ?? 0) >= 0;
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-info/10 border border-info/20 px-2.5 py-1.5 text-[11px]">
+      <span className="text-info font-semibold">Your avg ${fmtMoney(pos.entryPrice)}</span>
+      <span className={`num font-semibold ${up ? "text-bull" : "text-bear"}`}>
+        {up ? "+" : ""}${fmtMoney(pos.pnl ?? 0)} ({pct(pos.pnlPct)})
+      </span>
+    </div>
+  );
+}
+
+function BestTrade({ a, now, owned, pos, onBuy, onSell }: TradeCardProps) {
   return (
     <div className="rounded-2xl glass p-5 relative overflow-hidden">
       <div className="absolute -top-16 -right-10 h-48 w-48 rounded-full bg-bull/10 blur-3xl" />
@@ -497,6 +517,7 @@ function BestTrade({ a, now, owned, onBuy, onSell }: TradeCardProps) {
             <Level label="Stop" value={a.stop} sub={pct(a.stopPct)} tone="bear" />
           </div>
           <LevelBar entry={a.entry} target={a.target} stop={a.stop} now={now} />
+          <YourPosition pos={pos} />
           <TradeButtons owned={owned} onBuy={onBuy} onSell={onSell} tall />
         </div>
       </div>
@@ -504,7 +525,7 @@ function BestTrade({ a, now, owned, onBuy, onSell }: TradeCardProps) {
   );
 }
 
-function AlertCard({ a, now, owned, onBuy, onSell }: TradeCardProps) {
+function AlertCard({ a, now, owned, pos, onBuy, onSell }: TradeCardProps) {
   return (
     <div className="rounded-2xl glass p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -525,6 +546,8 @@ function AlertCard({ a, now, owned, onBuy, onSell }: TradeCardProps) {
       </div>
 
       <LevelBar entry={a.entry} target={a.target} stop={a.stop} now={now} />
+
+      <YourPosition pos={pos} />
 
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>R/R {a.riskReward?.toFixed(1)} · RSI {Math.round(a.rsi)} · Vol {a.relVol?.toFixed(1)}x</span>
