@@ -113,9 +113,19 @@ function Alerts() {
   });
   const ibkrPxBySym = new Map(heldQuotes.filter((q) => (q.last ?? 0) > 0).map((q) => [q.symbol, q.last]));
 
-  // Best real-time price for a symbol: IBKR snapshot (real-time, for held
-  // names) first, then the TradeScope feed (fine as a reference elsewhere).
-  const livePrice = (sym: string) => ibkrPxBySym.get(sym) ?? nowPrice(sym);
+  // Best "current price" for a symbol, session-aware:
+  //  - REGULAR hours: IBKR's real-time last is the fresh, tradeable truth.
+  //  - PRE/POST (extended) hours: IBKR's LAST-TRADE goes stale in the thin
+  //    after-hours book (few trades → an old print stays "last"), so it reads
+  //    LOWER than the price everyone sees on Yahoo/etc. The TradeScope pre/post
+  //    price tracks the consolidated tape, so prefer it there.
+  // Falls back across sources so a card always has a number.
+  const livePrice = (sym: string) => {
+    const tsq = quoteBySym.get(sym);
+    const extended = tsq?.session === "PRE" || tsq?.session === "POST";
+    const ibkr = ibkrPxBySym.get(sym);
+    return extended ? (tsq?.price ?? ibkr) : (ibkr ?? tsq?.price);
+  };
 
   // A held position with P&L recomputed from the live price, so a card's "Now"
   // and its P&L can never contradict each other (both come from one number).

@@ -73,6 +73,8 @@ export interface TsQuote {
   price: number;
   changePct: number;
   live: boolean;
+  /** "PRE" | "REGULAR" | "POST" — which session `price` belongs to. */
+  session?: string;
 }
 
 export interface TsBacktest {
