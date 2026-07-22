@@ -543,6 +543,7 @@ export async function getOrders() {
     price: parseIBKRNum(o.price ?? o.auxPrice ?? o.stop_price ?? o.stopPrice ?? o.avgPrice),
     status: mapStatus(o.status),
     rawStatus: o.status,
+    tif: (o.timeInForce ?? o.tif ?? "") as string,
     avgPrice: parseIBKRNum(o.avgPrice),
     timeMs: Number(o.lastExecutionTime_r) || 0,
     time: new Date(o.lastExecutionTime_r ?? Date.now()).toLocaleTimeString(
@@ -592,8 +593,10 @@ export interface PlaceOrderParams {
   conid?: number;
   side: "BUY" | "SELL";
   quantity: number;
-  orderType: "MKT" | "LMT" | "STP";
-  /** Limit price (LMT) or stop trigger price (STP). */
+  /** MIT = Market-If-Touched: the moment the price touches `price`, a MARKET
+   *  order fires — fill guaranteed (RTH only; IBKR has no MIT outside RTH). */
+  orderType: "MKT" | "LMT" | "STP" | "MIT";
+  /** Limit price (LMT) or trigger price (STP / MIT). */
   price?: number;
   /** Optional bracket: fixed stop-loss trigger for the opposite side. */
   stopLoss?: number;
@@ -614,7 +617,7 @@ export interface PlaceOrderParams {
 export async function placeOrder(params: PlaceOrderParams) {
   const { symbol, side, quantity, orderType, price, stopLoss, trailingStopPct, takeProfit } = params;
   if (!quantity || quantity <= 0) throw new Error("Quantity must be positive");
-  if ((orderType === "LMT" || orderType === "STP") && !price) {
+  if (orderType !== "MKT" && !price) {
     throw new Error(`${orderType} orders need a price`);
   }
 
@@ -633,7 +636,7 @@ export async function placeOrder(params: PlaceOrderParams) {
       side,
       quantity,
       tif: params.tif ?? "DAY",
-      // LMT: price = limit. STP: price = stop trigger.
+      // LMT: price = limit. STP/MIT: price = trigger.
       ...(orderType !== "MKT" ? { price } : {}),
       ...(params.outsideRth && orderType === "LMT" ? { outsideRTH: true } : {}),
     },
@@ -683,6 +686,22 @@ export async function placeOrder(params: PlaceOrderParams) {
   const result = await submitOrders(orders);
   invalidatePositionsCache();
   return result;
+}
+
+/**
+ * The gateway can ACK an order and still silently drop it (dead bridge — it
+ * happened live: "Submitted" reply, but the order never existed at IBKR).
+ * After every submit, poll the real order book until the order shows up.
+ * Returns its raw IBKR status, or null if it never appeared.
+ */
+export async function verifyOrderLive(orderId: string, tries = 6): Promise<string | null> {
+  for (let i = 0; i < tries; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const orders = await getOrders().catch(() => [] as Awaited<ReturnType<typeof getOrders>>);
+    const o = orders.find((x) => String(x.orderId) === String(orderId));
+    if (o) return o.rawStatus as string;
+  }
+  return null;
 }
 
 /** Close an open position with a market order on the opposite side. */

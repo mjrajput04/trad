@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, X, Zap } from "lucide-react";
-import { cancelWorkingOrders, getAccountSummary, getQuotes, placeOrder } from "@/lib/api/ibkr";
+import { cancelWorkingOrders, getAccountSummary, getQuotes, placeOrder, verifyOrderLive } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
@@ -47,8 +47,11 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
   const [side, setSide] = useState<"BUY" | "SELL">(initialSide);
   const [qty, setQty] = useState<number>(0);
   // extended hours accepts LMT only — default accordingly
-  const [type, setType] = useState<"MKT" | "LMT">(() => (inExtendedHours() ? "LMT" : "MKT"));
+  const [type, setType] = useState<"MKT" | "LMT" | "MIT">(() => (inExtendedHours() ? "LMT" : "MKT"));
   const [price, setPrice] = useState<number>(defaults?.price ?? 0);
+  // GTC by default: a DAY limit dies at the close, and "my order was gone the
+  // day the price finally touched" is exactly the trap that costs money.
+  const [tif, setTif] = useState<"DAY" | "GTC">("GTC");
   const [slMode, setSlMode] = useState<"trail" | "fixed" | "none">(defaults?.stop ? "trail" : "none");
   const [trailPct, setTrailPct] = useState<number>(0);
   const [fixedStop, setFixedStop] = useState<number>(defaults?.stop ?? 0);
@@ -98,7 +101,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
   const order = useMutation({
     mutationFn: async () => {
       if (!qty || qty <= 0) throw new Error("Enter a valid quantity");
-      if (type === "LMT" && (!price || price <= 0)) throw new Error("Limit orders need a price");
+      if (type !== "MKT" && (!price || price <= 0)) throw new Error(`${type} orders need a price`);
       if (slMode === "trail" && (!trailPct || trailPct <= 0)) throw new Error("Enter a trailing %");
       if (slMode === "fixed" && (!fixedStop || fixedStop <= 0)) throw new Error("Enter a stop price");
       // Selling out of a position? First cancel its leftover bracket orders
@@ -106,21 +109,34 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
       if (side === "SELL" && ownedQty > 0) {
         await cancelWorkingOrders({ symbol }).catch(() => {});
       }
-      if (afterHours && type === "MKT") throw new Error("After-hours ma LIMIT order j chale — LMT select karo");
+      if (afterHours && type !== "LMT") throw new Error("After-hours ma LIMIT order j chale — LMT select karo");
       return placeOrder({
         symbol,
         side,
         quantity: qty,
         orderType: type,
-        price: type === "LMT" ? price : undefined,
+        price: type !== "MKT" ? price : undefined,
         trailingStopPct: side === "BUY" && slMode === "trail" ? trailPct : undefined,
         stopLoss: side === "BUY" && slMode === "fixed" ? fixedStop : undefined,
         takeProfit: side === "BUY" && tp > 0 ? tp : undefined,
+        tif: type === "MKT" ? "DAY" : tif,
         outsideRth: afterHours && type === "LMT",
       });
     },
     onSuccess: (result) => {
       toast.success(`${side} ${qty} ${symbol} sent to IBKR — #${result.orderId} (${result.status})`);
+      // The gateway has ACKed and still dropped an order before (dead bridge,
+      // live money) — always confirm it exists in the real order book.
+      verifyOrderLive(result.orderId).then((st) => {
+        if (st) {
+          toast.success(`✅ ${symbol} order IBKR par LIVE che (${st})`, { duration: 8000 });
+        } else {
+          toast.error(
+            `⚠️ ${symbol} order IBKR na order book ma NATHI dekhato! Orders page check karo — jarur pade FARI muko.`,
+            { duration: 20000 }
+          );
+        }
+      });
       qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
       qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
       qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
@@ -129,13 +145,14 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
     onError: (e: any) => toast.error(e?.message ?? "Order failed"),
   });
 
-  const est = qty * (type === "LMT" ? price : now);
+  const refPx = type !== "MKT" ? price : now;
+  const est = qty * refPx;
   const riskPct =
     side === "BUY" && summary?.netLiquidation && qty > 0
       ? slMode === "trail" && trailPct > 0
-        ? ((qty * (type === "LMT" ? price : now) * (trailPct / 100)) / summary.netLiquidation) * 100
+        ? ((qty * refPx * (trailPct / 100)) / summary.netLiquidation) * 100
         : slMode === "fixed" && fixedStop > 0
-          ? ((qty * ((type === "LMT" ? price : now) - fixedStop)) / summary.netLiquidation) * 100
+          ? ((qty * (refPx - fixedStop)) / summary.netLiquidation) * 100
           : null
       : null;
 
@@ -169,17 +186,34 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
           </label>
           <label className="block">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Order Type</div>
-            <select value={type} onChange={(e) => setType(e.target.value as "MKT" | "LMT")} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm focus:outline-none">
+            <select value={type} onChange={(e) => { const t = e.target.value as "MKT" | "LMT" | "MIT"; setType(t); if (t === "MIT") setAfterHours(false); }} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm focus:outline-none">
               <option value="MKT">Market</option>
               <option value="LMT">Limit</option>
+              <option value="MIT">Touch → Market (MIT)</option>
             </select>
           </label>
         </div>
 
-        {type === "LMT" && (
+        {type !== "MKT" && (
           <label className="block mb-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Limit Price</div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{type === "MIT" ? "Touch Price" : "Limit Price"}</div>
             <input type="number" min={0} step="0.01" value={price || ""} onChange={(e) => setPrice(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num focus:outline-none" />
+          </label>
+        )}
+
+        {type === "MIT" && (
+          <div className="mb-3 rounded-lg bg-info/10 border border-info/20 px-3 py-2 text-[11px]">
+            <span className="font-semibold">MIT:</span> price aa level ne 1 tick pan ade etle turant <span className="font-semibold">MARKET</span> order fire — fill 100% pakku (exact price nahi, market bhaav malse). Regular hours (9:30–16:00 ET) ma j trigger thase; after-hours mate LMT vaparo.
+          </div>
+        )}
+
+        {type !== "MKT" && (
+          <label className="mb-3 flex items-center gap-2 text-[11px] cursor-pointer rounded-lg hairline bg-surface-1 px-3 py-2">
+            <input type="checkbox" checked={tif === "GTC"} onChange={(e) => setTif(e.target.checked ? "GTC" : "DAY")} />
+            <span>
+              <span className="font-semibold">GTC — order expire NAHI thay</span>
+              <span className="text-muted-foreground"> — fill na thay tya sudhi roj IBKR par live rahe (logout/app bandh thi farak nathi padto). Off karo to aaje market close par order mari jase.</span>
+            </span>
           </label>
         )}
 
