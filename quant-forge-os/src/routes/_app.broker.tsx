@@ -3,11 +3,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LiveDot } from "@/components/Delta";
 import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, verifyOrderLive, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { toast } from "sonner";
+
+// Are we in IBKR's extended session (pre-market 4:00–9:30 or after-hours
+// 16:00–20:00 ET on a weekday)? Outside RTH, a plain LMT is ignored unless the
+// order carries the outsideRTH flag, and MKT orders aren't accepted at all.
+function inExtendedHours(): boolean {
+  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return (mins >= 4 * 60 && mins < 9 * 60 + 30) || (mins >= 16 * 60 && mins < 20 * 60);
+}
 
 type BrokerSearch = {
   symbol?: string;
@@ -50,6 +61,12 @@ function Broker() {
   const [stop, setStop] = useState(search.stop ?? 0);
   const [tp, setTp] = useState(search.tp ?? 0);
   const [fromAlert, setFromAlert] = useState(!!search.symbol && (search.price ?? 0) > 0);
+  // Extended-hours execution (pre/after market). Defaults ON when we're in an
+  // extended session so a pre/after-market order actually executes.
+  const [afterHours, setAfterHours] = useState<boolean>(() => inExtendedHours());
+  // GTC by default: a DAY order expires at the close; "I set it and it never
+  // filled the next day" is exactly the silent-death trap we're closing.
+  const [tif, setTif] = useState<"DAY" | "GTC">("GTC");
 
   // Live price for the selected symbol — shown next to the ticket and used to
   // auto-fill sensible levels when you pick a new stock.
@@ -122,6 +139,7 @@ function Broker() {
         if (side === "SELL" && stop > 0 && stop <= price) throw new Error("SELL: stop-loss must be above the limit price");
         if (side === "SELL" && tp > 0 && tp >= price) throw new Error("SELL: take-profit must be below the limit price");
       }
+      if (afterHours && type === "MKT") throw new Error("After-hours ma LIMIT order j chale — LMT select karo");
       return placeOrder({
         symbol: symbol.trim(),
         side,
@@ -130,10 +148,18 @@ function Broker() {
         price: type === "MKT" ? undefined : price,
         stopLoss: stop > 0 ? stop : undefined,
         takeProfit: tp > 0 ? tp : undefined,
+        tif: type === "MKT" ? "DAY" : tif,
+        outsideRth: afterHours && type === "LMT",
       });
     },
     onSuccess: (result) => {
       toast.success(`${side} ${qty} ${symbol} sent to IBKR — #${result.orderId} (${result.status})`);
+      // The gateway can ACK an order and still silently drop it (dead bridge) —
+      // confirm it actually exists in the real order book.
+      verifyOrderLive(result.orderId).then((st) => {
+        if (st) toast.success(`✅ ${symbol} order IBKR par LIVE che (${st})`, { duration: 8000 });
+        else toast.error(`⚠️ ${symbol} order IBKR order book ma NATHI dekhato — Orders page check karo, jarur pade FARI muko!`, { duration: 20000 });
+      });
       qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
       qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
       qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
@@ -317,6 +343,43 @@ function Broker() {
               <input type="number" min={0} step="0.01" value={tp} onChange={(e) => setTp(+e.target.value)} className="w-full h-9 rounded-lg bg-surface-1 hairline px-3 text-sm num text-bull focus:outline-none" />
             </Row>
           </div>
+
+          {/* Extended-hours execution (pre-market / after-hours) */}
+          <label className="flex items-center gap-2 text-[11px] cursor-pointer rounded-lg hairline bg-surface-1 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={afterHours}
+              onChange={(e) => { setAfterHours(e.target.checked); if (e.target.checked && type === "MKT") setType("LMT"); }}
+            />
+            <span>
+              <span className="font-semibold">After-hours execution</span>
+              <span className="text-muted-foreground"> — pre-market 4:00–9:30 / after-hours 16:00–20:00 ET. LIMIT only; liquidity patlu, limit price barabar mukvo.</span>
+            </span>
+          </label>
+
+          {/* GTC vs DAY */}
+          {type !== "MKT" && (
+            <label className="flex items-center gap-2 text-[11px] cursor-pointer rounded-lg hairline bg-surface-1 px-3 py-2">
+              <input type="checkbox" checked={tif === "GTC"} onChange={(e) => setTif(e.target.checked ? "GTC" : "DAY")} />
+              <span>
+                <span className="font-semibold">GTC — order expire NAHI thay</span>
+                <span className="text-muted-foreground"> — fill na thay tya sudhi roj live rahe (logout/app bandh thi farak nahi). Off karo to aaje close par mari jase.</span>
+              </span>
+            </label>
+          )}
+
+          {/* Limit won't fill NOW warning — the "GOOGL 332 didn't buy" trap */}
+          {type === "LMT" && price > 0 && nowPrice > 0 &&
+            ((side === "BUY" && price < nowPrice) || (side === "SELL" && price > nowPrice)) && (
+            <div className="rounded-lg bg-warn/10 border border-warn/20 px-3 py-2 text-[11px] text-warn flex items-start gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                {side === "BUY"
+                  ? <>Limit <span className="num font-semibold">${price}</span> atyar na bhaav <span className="num font-semibold">${fmtMoney(nowPrice)}</span> thi NICHE che — <span className="font-semibold">atyare fill NAHI thay</span>, price niche aave tyare j. Turant kharidva "Use live price" dabao ke limit ${fmtMoney(nowPrice)} kar.</>
+                  : <>Limit <span className="num font-semibold">${price}</span> atyar na bhaav <span className="num font-semibold">${fmtMoney(nowPrice)}</span> thi UPAR che — <span className="font-semibold">atyare fill NAHI thay</span>. Turant vechva limit ${fmtMoney(nowPrice)} ke niche kar.</>}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="mt-5 rounded-xl hairline bg-surface-1 p-4 space-y-2 text-xs">
@@ -355,6 +418,8 @@ function Broker() {
                 <span className="text-lg font-bold num">{qty} {symbol}</span>
               </div>
               <div className="flex justify-between text-xs"><span className="text-muted-foreground">Order type</span><span className="num">{type === "MKT" ? "Market" : `${type} @ $${fmtMoney(price)}`}</span></div>
+              {type !== "MKT" && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Time in force</span><span className="num">{tif === "GTC" ? "GTC · till filled" : "DAY · expires at close"}</span></div>}
+              {afterHours && type === "LMT" && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Session</span><span className="num text-warn">Extended (pre/after-hours)</span></div>}
               {nowPrice > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Current price</span><span className="num">${fmtMoney(nowPrice)}</span></div>}
               {stop > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Stop loss</span><span className="num text-bear">${fmtMoney(stop)}</span></div>}
               {tp > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Take profit</span><span className="num text-bull">${fmtMoney(tp)}</span></div>}
