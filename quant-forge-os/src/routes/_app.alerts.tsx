@@ -96,6 +96,42 @@ function Alerts() {
   });
   const etfBySym = new Map(etfQuotes.map((q) => [q.symbol, q]));
 
+  // Real-time IBKR prices for symbols you HOLD. The TradeScope/Yahoo feed lags
+  // several minutes, and IBKR's portfolio P&L is a separate cached snapshot —
+  // so a held card used to show a stale "Now" next to a P&L computed off a
+  // *different* stale price, and the two never agreed (e.g. "Now 171.63" beside
+  // "-$303" while the stock was really 174+). IBKR's snapshot is the real,
+  // tradeable price: for anything you hold we show that and recompute P&L from
+  // the SAME number, so the card is always internally consistent and live.
+  const heldSyms = [...new Set(positions.filter((p) => p.quantity > 0).map((p) => p.symbol))];
+  const { data: heldQuotes = [] } = useQuery({
+    queryKey: ["ibkr-held-quotes", heldSyms.join(",")],
+    queryFn: () => getQuotes(heldSyms),
+    enabled: heldSyms.length > 0,
+    refetchInterval: 3_000,
+    retry: false,
+  });
+  const ibkrPxBySym = new Map(heldQuotes.filter((q) => (q.last ?? 0) > 0).map((q) => [q.symbol, q.last]));
+
+  // Best real-time price for a symbol: IBKR snapshot (real-time, for held
+  // names) first, then the TradeScope feed (fine as a reference elsewhere).
+  const livePrice = (sym: string) => ibkrPxBySym.get(sym) ?? nowPrice(sym);
+
+  // A held position with P&L recomputed from the live price, so a card's "Now"
+  // and its P&L can never contradict each other (both come from one number).
+  const livePos = (sym: string): Position | undefined => {
+    const pos = posBySym.get(sym);
+    if (!pos) return undefined;
+    const live = livePrice(sym);
+    if (!live || live <= 0 || !(pos.entryPrice > 0)) return pos;
+    return {
+      ...pos,
+      currentPrice: live,
+      pnl: (live - pos.entryPrice) * pos.quantity,
+      pnlPct: ((live - pos.entryPrice) / pos.entryPrice) * 100,
+    };
+  };
+
   // Same silent quality-gate as buy alerts: a short play only appears while it
   // is genuinely WORKING — the inverse ETF is up ≥0.2% AND above today's open
   // (its index is actually falling). Nothing strong → the whole section hides.
@@ -218,9 +254,9 @@ function Alerts() {
           {bestTrade && (
             <BestTrade
               a={bestTrade}
-              now={nowPrice(bestTrade.symbol)}
+              now={livePrice(bestTrade.symbol)}
               owned={ownedBySym.get(bestTrade.symbol) ?? 0}
-              pos={posBySym.get(bestTrade.symbol)}
+              pos={livePos(bestTrade.symbol)}
               onBuy={() => openBuy(bestTrade)}
               onSell={() => openSell(bestTrade.symbol)}
             />
@@ -279,7 +315,7 @@ function Alerts() {
                             <Level label="Stop" value={stopL} sub="-2.00%" tone="bear" />
                           </div>
                           <LevelBar entry={entry} target={target} stop={stopL} now={now || undefined} />
-                          <YourPosition pos={posBySym.get(e.symbol)} />
+                          <YourPosition pos={livePos(e.symbol)} />
                           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>Bearish play · rises when the market falls</span>
                             {now > 0 && <span className="num">Now {money(now)}</span>}
@@ -330,9 +366,9 @@ function Alerts() {
                   <AlertCard
                     key={a.id}
                     a={a}
-                    now={nowPrice(a.symbol)}
+                    now={livePrice(a.symbol)}
                     owned={ownedBySym.get(a.symbol) ?? 0}
-                    pos={posBySym.get(a.symbol)}
+                    pos={livePos(a.symbol)}
                     onBuy={() => openBuy(a)}
                     onSell={() => openSell(a.symbol)}
                   />
@@ -341,7 +377,7 @@ function Alerts() {
                   <HoldingCard
                     key={p.conid}
                     p={p}
-                    now={nowPrice(p.symbol)}
+                    now={livePrice(p.symbol)}
                     onBuy={() => setTrade({ symbol: p.symbol, side: "BUY" })}
                     onSell={() => openSell(p.symbol)}
                   />
@@ -402,7 +438,12 @@ function HoldingCard({ p, now, onBuy, onSell }: {
   onSell: () => void;
 }) {
   const live = now ?? p.currentPrice ?? 0;
-  const up = (p.pnl ?? 0) >= 0;
+  // Recompute P&L from the SAME live price shown as "Now" so they always agree
+  // (never a stale-snapshot P&L beside a differently-stale price).
+  const consistent = live > 0 && p.entryPrice > 0;
+  const pnl = consistent ? (live - p.entryPrice) * p.quantity : (p.pnl ?? 0);
+  const pnlPct = consistent ? ((live - p.entryPrice) / p.entryPrice) * 100 : (p.pnlPct ?? 0);
+  const up = pnl >= 0;
   return (
     <div className="rounded-2xl glass p-4 flex flex-col gap-3 border border-info/25">
       <div className="flex items-center justify-between">
@@ -413,7 +454,7 @@ function HoldingCard({ p, now, onBuy, onSell }: {
           <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {p.quantity}</span>
         </div>
         <span className={`text-xs num font-semibold ${up ? "text-bull" : "text-bear"}`}>
-          {up ? "+" : ""}${fmtMoney(p.pnl ?? 0)} ({pct(p.pnlPct)})
+          {up ? "+" : ""}${fmtMoney(pnl)} ({pct(pnlPct)})
         </span>
       </div>
       <div className="flex gap-2">
