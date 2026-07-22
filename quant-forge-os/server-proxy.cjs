@@ -117,31 +117,38 @@ async function gw(path, body) {
 }
 
 let keepaliveBusy = false;
-let keepaliveCycles = 0;
+async function establishBridge(reason) {
+  console.log(`[keepalive] ${reason} — re-establishing brokerage bridge`);
+  await gw('/iserver/reauthenticate').catch(() => {});
+  await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
+  // Prime accounts + warm the market-data farm so real-time prices flow again
+  // (a re-auth alone leaves /accounts 400 and snapshots empty for a moment).
+  await fetch(`${GW}/iserver/accounts`).catch(() => {});
+}
+
 async function keepalive() {
   if (keepaliveBusy) return;
   keepaliveBusy = true;
   try {
     await gw('/tickle').catch(() => {});
-    // Every 5 minutes also check the brokerage session and revive it if idle.
-    if (++keepaliveCycles % 5 === 0) {
-      const st = await gw('/iserver/auth/status').catch(() => null);
-      const s = st && st.json;
-      if (s && s.connected && !s.authenticated) {
-        console.log('[keepalive] brokerage session idle — reviving');
-        await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
-        await gw('/iserver/reauthenticate').catch(() => {});
-      } else if (s && s.authenticated) {
-        // SSO is up, but a FRESH login leaves the brokerage bridge
-        // uninitialized ("no bridge" 400s) until someone runs ssodh/init.
-        // Do it here so the app is ready even if no tab is open.
-        const acc = await fetch(`${GW}/iserver/accounts`).then((r) => r.status).catch(() => 0);
-        if (acc === 400 || acc === 401) {
-          console.log('[keepalive] bridge down after login — initializing');
-          await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
-          await gw('/iserver/reauthenticate').catch(() => {});
-        }
-      }
+    // Check the brokerage session EVERY cycle (60s), not every 5 min. Tickle
+    // keeps the SSO cookie alive, but the brokerage/market-data bridge drops
+    // independently — auth flips to authenticated:false while the SSO is still
+    // valid. That's what shows the app "Disconnected" on stale, delayed prices.
+    // A live trader must never sit on a dead feed for minutes, so re-establish
+    // the instant it's down.
+    const st = await gw('/iserver/auth/status').catch(() => null);
+    const s = st && st.json;
+    if (s && !s.authenticated) {
+      // SSO alive (tickle ok) but brokerage session not authenticated — covers
+      // BOTH connected:false and connected:true (the old code only handled the
+      // connected:true case, so a full drop stayed dead until manual revival).
+      await establishBridge(`session down (auth=${s.authenticated} conn=${s.connected})`);
+    } else if (s && s.authenticated) {
+      // Authenticated, but a FRESH login can leave the bridge uninitialized
+      // ("no bridge" 400s on /accounts) until someone runs ssodh/init.
+      const acc = await fetch(`${GW}/iserver/accounts`).then((r) => r.status).catch(() => 0);
+      if (acc === 400 || acc === 401) await establishBridge('bridge down after login');
     }
   } catch (_) {
     // gateway down or SSO fully expired — nothing to do until someone logs in
