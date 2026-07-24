@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AlertTriangle, Loader2, Trophy, Bell, Newspaper,
   ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingDown,
@@ -104,11 +104,13 @@ function Alerts() {
   // beside "-$303" while the stock was really 174+). IBKR's snapshot is the
   // real, tradeable price and stays live through Yahoo outages — so we pull it
   // for the whole page and recompute held P&L from the SAME number.
+  // Sorted so the query key is stable when the SAME symbols re-appear in a
+  // different order on a rescan (avoids needless cold refetches).
   const displaySyms = [...new Set([
     ...positions.filter((p) => p.quantity > 0).map((p) => p.symbol),
     ...(data?.alerts ?? []).map((a) => a.symbol).filter(Boolean),
     ...(data?.bestTrade?.symbol ? [data.bestTrade.symbol] : []),
-  ])];
+  ])].sort();
   const { data: ibkrQuotes = [] } = useQuery({
     queryKey: ["ibkr-live-quotes", displaySyms.join(",")],
     queryFn: () => getQuotes(displaySyms),
@@ -116,7 +118,17 @@ function Alerts() {
     refetchInterval: 3_000,
     retry: false,
   });
-  const ibkrPxBySym = new Map(ibkrQuotes.filter((q) => (q.last ?? 0) > 0).map((q) => [q.symbol, q.last]));
+  // Persistent last-known IBKR price per symbol. The brokerage session flaps
+  // (snapshot 500s for a beat) and the query key changes every ~20s as alerts
+  // rescan — either one blanks ibkrQuotes momentarily, and WITHOUT persistence
+  // the cards snapped back to the stale Yahoo price ("jumped to old data").
+  // Merge each fresh price in; never drop a known one, so a card holds its last
+  // real IBKR price through the gap instead of reverting.
+  const ibkrPxRef = useRef<Map<string, number>>(new Map());
+  for (const q of ibkrQuotes) {
+    if ((q.last ?? 0) > 0) ibkrPxRef.current.set(q.symbol, q.last as number);
+  }
+  const ibkrPxBySym = ibkrPxRef.current;
 
   // Best "current price" for a symbol, session-aware:
   //  - REGULAR hours: IBKR's real-time last is the fresh, tradeable truth.
