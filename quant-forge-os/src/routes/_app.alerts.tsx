@@ -96,22 +96,27 @@ function Alerts() {
   });
   const etfBySym = new Map(etfQuotes.map((q) => [q.symbol, q]));
 
-  // Real-time IBKR prices for symbols you HOLD. The TradeScope/Yahoo feed lags
-  // several minutes, and IBKR's portfolio P&L is a separate cached snapshot —
-  // so a held card used to show a stale "Now" next to a P&L computed off a
-  // *different* stale price, and the two never agreed (e.g. "Now 171.63" beside
-  // "-$303" while the stock was really 174+). IBKR's snapshot is the real,
-  // tradeable price: for anything you hold we show that and recompute P&L from
-  // the SAME number, so the card is always internally consistent and live.
-  const heldSyms = [...new Set(positions.filter((p) => p.quantity > 0).map((p) => p.symbol))];
-  const { data: heldQuotes = [] } = useQuery({
-    queryKey: ["ibkr-held-quotes", heldSyms.join(",")],
-    queryFn: () => getQuotes(heldSyms),
-    enabled: heldSyms.length > 0,
+  // Real-time IBKR prices for EVERY symbol we render — held positions, every
+  // alert, and the best trade. The free TradeScope/Yahoo feed periodically
+  // FREEZES mid-session (all symbols stall for 20-30 min) which leaves every
+  // card stuck on an old price; even when fresh it lags a few minutes and its
+  // P&L is a separate cached snapshot (a held card once showed "Now 171.63"
+  // beside "-$303" while the stock was really 174+). IBKR's snapshot is the
+  // real, tradeable price and stays live through Yahoo outages — so we pull it
+  // for the whole page and recompute held P&L from the SAME number.
+  const displaySyms = [...new Set([
+    ...positions.filter((p) => p.quantity > 0).map((p) => p.symbol),
+    ...(data?.alerts ?? []).map((a) => a.symbol).filter(Boolean),
+    ...(data?.bestTrade?.symbol ? [data.bestTrade.symbol] : []),
+  ])];
+  const { data: ibkrQuotes = [] } = useQuery({
+    queryKey: ["ibkr-live-quotes", displaySyms.join(",")],
+    queryFn: () => getQuotes(displaySyms),
+    enabled: displaySyms.length > 0,
     refetchInterval: 3_000,
     retry: false,
   });
-  const ibkrPxBySym = new Map(heldQuotes.filter((q) => (q.last ?? 0) > 0).map((q) => [q.symbol, q.last]));
+  const ibkrPxBySym = new Map(ibkrQuotes.filter((q) => (q.last ?? 0) > 0).map((q) => [q.symbol, q.last]));
 
   // Best "current price" for a symbol, session-aware:
   //  - REGULAR hours: IBKR's real-time last is the fresh, tradeable truth.
