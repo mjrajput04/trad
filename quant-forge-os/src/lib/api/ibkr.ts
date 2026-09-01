@@ -10,10 +10,27 @@ const BASE = import.meta.env.DEV ? "/ibkr" : `${GATEWAY_URL}/v1/api`;
 /** Where the user logs into the IBKR gateway (opens in a new tab). */
 export const GATEWAY_LOGIN_URL = GATEWAY_URL;
 
-let CURRENT_ACCOUNT = import.meta.env.VITE_IBKR_ACCOUNT_ID ?? "U25901412";
+// The account this instance trades. Pinned by VITE_IBKR_ACCOUNT_ID when set
+// (the owner's build); otherwise auto-detected from /iserver/accounts, i.e.
+// "whoever logged into THIS gateway" — which is what lets one build serve a
+// different client on their own gateway/proxy instance.
+const ENV_ACCOUNT: string = import.meta.env.VITE_IBKR_ACCOUNT_ID ?? "";
+let CURRENT_ACCOUNT = ENV_ACCOUNT;
 
 export function setIBKRAccount(id: string) {
-  CURRENT_ACCOUNT = id;
+  if (id) CURRENT_ACCOUNT = id;
+}
+
+/** Adopt the account the gateway reports (no-op when pinned by env). */
+function adoptDetectedAccount(json: any) {
+  if (ENV_ACCOUNT) return;
+  const acct: string | undefined = json?.selectedAccount || json?.accounts?.[0];
+  if (!acct || acct === CURRENT_ACCOUNT) return;
+  CURRENT_ACCOUNT = acct;
+  if (typeof window !== "undefined") {
+    try { localStorage.setItem("nova_ibkr_account", acct); } catch { /* private mode */ }
+    window.dispatchEvent(new CustomEvent("nova:ibkr-account", { detail: acct }));
+  }
 }
 
 export function getIBKRAccount() {
@@ -82,7 +99,10 @@ async function initBrokerage() {
           }
         }
         rawFetch("/portfolio/accounts").catch(() => {}); // best-effort prime
-        if (r.ok) brokerageReady = true;
+        if (r.ok) {
+          brokerageReady = true;
+          adoptDetectedAccount(await r.json().catch(() => null));
+        }
       } catch {
         /* retried on next call */
       }
@@ -231,6 +251,13 @@ async function ibkr<T>(path: string, options?: RequestInit): Promise<T> {
   // the account summary loaded.
   await initBrokerage();
 
+  // Callers build `/portfolio/${CURRENT_ACCOUNT}/…` BEFORE this runs; on the
+  // very first call of an auto-detected instance the account was still "" and
+  // the path has an empty segment ("//"). Patch it in now that we know it.
+  if (CURRENT_ACCOUNT && path.includes("//")) {
+    path = path.replace("//", `/${CURRENT_ACCOUNT}/`);
+  }
+
   let res = await rawFetch(path, options);
 
   // Auth expired mid-session → re-bootstrap once and retry.
@@ -250,7 +277,8 @@ async function ibkr<T>(path: string, options?: RequestInit): Promise<T> {
     // order endpoints 400 with "accountId is not valid" until /iserver/accounts
     // is fetched again. Re-prime and retry once, invisibly.
     if (res.status === 400 && text.includes("accountId is not valid")) {
-      await rawFetch("/iserver/accounts").catch(() => {});
+      const pr = await rawFetch("/iserver/accounts").catch(() => null);
+      if (pr?.ok) adoptDetectedAccount(await pr.json().catch(() => null));
       res = await rawFetch(path, options);
       if (res.ok) return res.json();
     }
@@ -621,6 +649,9 @@ export async function placeOrder(params: PlaceOrderParams) {
     throw new Error(`${orderType} orders need a price`);
   }
 
+  if (!CURRENT_ACCOUNT) {
+    throw new Error("IBKR account not detected yet — log in to the gateway, then retry.");
+  }
   const conid = params.conid ?? (await getConid(symbol));
   if (!conid) throw new Error(`Symbol ${symbol} not found at IBKR`);
 
@@ -733,6 +764,9 @@ export async function cancelWorkingOrders(filter: { symbol?: string; conid?: num
 
 export async function closePosition(conid: number, quantity: number) {
   if (!quantity) throw new Error("Nothing to close");
+  if (!CURRENT_ACCOUNT) {
+    throw new Error("IBKR account not detected yet — log in to the gateway, then retry.");
+  }
   // Kill any working orders on this contract first (see cancelWorkingOrders).
   await cancelWorkingOrders({ conid }).catch(() => {});
   const result = await submitOrders([

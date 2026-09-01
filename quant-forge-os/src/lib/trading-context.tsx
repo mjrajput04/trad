@@ -13,7 +13,24 @@ interface TradingContextType {
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
 export function TradingProvider({ children }: { children: React.ReactNode }) {
-  const liveAccount = import.meta.env.VITE_IBKR_ACCOUNT_ID ?? "U25901412";
+  // Pinned by env for the owner's build. When unset (a client instance), the
+  // account is whatever the gateway reports after login — ibkr.ts detects it
+  // and announces it; we remember it across reloads in localStorage.
+  const envAccount: string = import.meta.env.VITE_IBKR_ACCOUNT_ID ?? "";
+  const [detected, setDetected] = useState<string>("");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("nova_ibkr_account");
+      if (saved) setDetected(saved);
+    } catch { /* private mode */ }
+    const onAcct = (e: Event) => {
+      const id = String((e as CustomEvent).detail ?? "");
+      if (id) setDetected(id);
+    };
+    window.addEventListener("nova:ibkr-account", onAcct);
+    return () => window.removeEventListener("nova:ibkr-account", onAcct);
+  }, []);
+  const liveAccount = envAccount || detected;
   // Only a real, explicitly-configured paper account is usable. A fabricated
   // "DU…" id would make every /portfolio/{acct}/* call fail, so if it is unset
   // paper mode is disabled entirely rather than guessing an account id.
@@ -32,7 +49,8 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem("nova_trading_mode", isPaper ? "paper" : "live");
-    setIBKRAccount(currentAccount);
+    // Never push "" — that would clobber an account ibkr.ts just detected.
+    if (currentAccount) setIBKRAccount(currentAccount);
   }, [isPaper, currentAccount]);
 
   return (

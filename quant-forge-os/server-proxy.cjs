@@ -7,7 +7,13 @@ const PORT = process.env.PORT || 8001;
 // Origins allowed to make credentialed cross-site calls (the web app).
 // Same-origin browser navigation to backend.nassphx.com sends no Origin header
 // and is always allowed.
-const ALLOWED_ORIGINS = ['https://nassphx.com', 'https://www.nassphx.com'];
+// Per-instance config (env), defaults = the owner's original deployment.
+//   GATEWAY_PORT    — the IBKR Client Portal Gateway this proxy fronts
+//   ALLOWED_ORIGINS — comma-separated app origins allowed to call it cross-site
+const GATEWAY_PORT = process.env.GATEWAY_PORT || '7175';
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
+  : ['https://nassphx.com', 'https://www.nassphx.com'];
 
 function isAllowedOrigin(origin) {
   if (!origin) return false;
@@ -44,7 +50,7 @@ app.get('/health', (req, res) => {
 //   - rewrite absolute localhost redirects to relative so the flow stays on
 //     backend.nassphx.com.
 const ibkrProxy = createProxyMiddleware({
-  target: 'http://localhost:7175',
+  target: `http://localhost:${GATEWAY_PORT}`,
   changeOrigin: true,
   secure: false,
   ws: true,
@@ -76,7 +82,7 @@ const ibkrProxy = createProxyMiddleware({
     // Keep redirects on backend.nassphx.com
     if (proxyRes.headers['location']) {
       proxyRes.headers['location'] = proxyRes.headers['location'].replace(
-        /^https?:\/\/localhost:7175/i,
+        new RegExp(`^https?://localhost:${GATEWAY_PORT}`, 'i'),
         ''
       );
     }
@@ -160,7 +166,7 @@ setInterval(keepalive, 60_000);
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 IBKR Proxy Server running on port ${PORT}`);
-  console.log(`📡 Proxying requests to IBKR Gateway at localhost:7175`);
+  console.log(`📡 Proxying requests to IBKR Gateway at localhost:${GATEWAY_PORT}`);
   keepalive(); // first ping once we can route through ourselves
 });
 

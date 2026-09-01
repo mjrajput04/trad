@@ -7,7 +7,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTrades, getOrders, type Trade } from "./api/ibkr";
 
 // The generated Database types predate this table — keep the cast contained here.
-const tradesTable = () => (supabase as any).from("ibkr_trades");
+// Each deployed instance archives into its own table (VITE_TRADES_TABLE), so a
+// second client's executions never mix with the owner's.
+const TRADES_TABLE: string = import.meta.env.VITE_TRADES_TABLE || "ibkr_trades";
+const tradesTable = () => (supabase as any).from(TRADES_TABLE);
 
 /** Archive IBKR executions (idempotent — duplicates are ignored). */
 export async function syncTrades(trades: Trade[]): Promise<number> {
