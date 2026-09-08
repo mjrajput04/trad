@@ -8,9 +8,10 @@ import { useAuth } from "@/lib/auth-context";
 // overlay within ~10s, everywhere in the app. State lives in Supabase
 // (app_flags.maintenance) so it reaches all devices; RLS lets everyone read it
 // but only these admin emails write it.
+// ONLY this identity is exempt from the hold-on screen (and sees the toggle).
+// Every other account — including the owner's trading login — gets blocked
+// while the switch is ON.
 export const NASSCORD_ADMINS = [
-  "nssphx@gmail.com",
-  "nassphx@gmail.com",
   "vivekvora32262@gmail.com",
 ];
 
