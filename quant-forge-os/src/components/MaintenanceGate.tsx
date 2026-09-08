@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Hand } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,10 +45,25 @@ export function MaintenanceGate() {
     refetchInterval: 10_000,
   });
 
-  if (!on || isNasscordAdmin(user?.email)) return null;
+  const active = on && !isNasscordAdmin(user?.email);
+
+  // Freeze the page behind the gate: nothing scrolls, nothing peeks through.
+  useEffect(() => {
+    if (!active) return;
+    const html = document.documentElement.style.overflow;
+    const body = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = html;
+      document.body.style.overflow = body;
+    };
+  }, [active]);
+
+  if (!active) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] grid place-items-center bg-background/95 backdrop-blur-md p-6">
+    <div className="fixed inset-0 z-[200] grid place-items-center bg-background p-6 touch-none overscroll-none">
       <div className="max-w-md w-full rounded-2xl glass hairline p-8 text-center">
         <Hand className="h-10 w-10 text-warn mx-auto mb-4" />
         <h2 className="text-lg font-bold mb-2">Hold your hands!</h2>
