@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, useNavigate, useRouterState, Link } from "@tan
 import React, { Component, useEffect, type ReactNode } from "react";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
+import { MaintenanceGate } from "@/components/MaintenanceGate";
 import { Topbar } from "@/components/Topbar";
 import { Ticker } from "@/components/Ticker";
 import { useAuth } from "@/lib/auth-context";
@@ -66,6 +67,7 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen flex">
+      <MaintenanceGate />
       <AppSidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar />
