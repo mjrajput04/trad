@@ -21,6 +21,17 @@ export const isNasscordAdmin = (email?: string | null) =>
 
 const flags = () => (supabase as any).from("app_flags");
 
+// The hold-on screen only blocks during REGULAR US market hours
+// (9:30–16:00 ET, weekdays). Pre-market, after-hours and closed days show the
+// platform normally even while the switch is ON.
+export function isRegularMarketHours(): boolean {
+  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+}
+
 export async function getMaintenanceFlag(): Promise<boolean> {
   const { data, error } = await flags().select("value").eq("id", "maintenance").maybeSingle();
   if (error) return false; // fail open — never lock users out on a read error
@@ -44,8 +55,15 @@ export function MaintenanceGate() {
     queryFn: getMaintenanceFlag,
     refetchInterval: 10_000,
   });
+  // Re-evaluated every 30s so the gate appears/disappears at the open/close
+  // without a reload.
+  const { data: regularHours = false } = useQuery({
+    queryKey: ["nasscord-clock"],
+    queryFn: () => isRegularMarketHours(),
+    refetchInterval: 30_000,
+  });
 
-  const active = on && !isNasscordAdmin(user?.email);
+  const active = on && regularHours && !isNasscordAdmin(user?.email);
 
   // Freeze the page behind the gate: nothing scrolls, nothing peeks through.
   useEffect(() => {
@@ -101,8 +119,9 @@ export function NasscordToggle() {
         <div className="min-w-0">
           <div className="text-sm font-medium">Hold-on mode</div>
           <div className="text-[11px] text-muted-foreground">
-            ON = every non-admin user instantly sees the &quot;Hold your hands — NASSCORD SLM is
-            working on it&quot; screen. Admins keep full access.
+            ON = every non-admin user sees the &quot;Hold your hands — NASSCORD SLM is working on
+            it&quot; screen — but only during regular market hours (9:30–16:00 ET, weekdays).
+            Pre-market, after-hours and closed days stay normal for everyone.
           </div>
         </div>
         <button
@@ -119,7 +138,9 @@ export function NasscordToggle() {
       </div>
       {on && (
         <div className="px-5 pb-4 text-[11px] text-warn">
-          Hold-on mode is LIVE — all non-admin users are currently blocked.
+          {isRegularMarketHours()
+            ? "Hold-on mode is LIVE — all non-admin users are currently blocked."
+            : "Hold-on mode is ARMED — it will block non-admin users when the market opens (9:30 ET)."}
         </div>
       )}
     </section>
