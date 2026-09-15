@@ -109,6 +109,19 @@ export interface TsIndex {
   series: TsIndexBar[];
 }
 
+export interface TsAdhocQuote {
+  symbol: string;
+  price: number | null;
+  changePct: number | null;
+  session: string | null;
+}
+
+/** On-demand quotes for symbols outside the scanner universe (held ETFs etc). */
+export const getTsSymbolQuotes = (symbols: string[]) =>
+  ts<{ updated: string; quotes: TsAdhocQuote[] }>(
+    `/quote?symbols=${encodeURIComponent(symbols.join(","))}`
+  );
+
 export const getTsAlerts = () => ts<TsAlertsResponse>("/alerts");
 export const getTsQuotes = () => ts<{ updated: string; quotes: TsQuote[] }>("/quotes");
 export const getTsBacktest = () => ts<TsBacktest>("/backtest");

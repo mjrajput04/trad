@@ -6,7 +6,7 @@ import {
   ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingDown,
 } from "lucide-react";
 import {
-  getTsAlerts, getTsQuotes, getTsBacktest, bracketStop,
+  getTsAlerts, getTsQuotes, getTsBacktest, getTsSymbolQuotes, bracketStop,
   type TsAlert, type TsBacktest,
 } from "@/lib/api/alerts";
 import { getPositions, getQuotes, type Position } from "@/lib/api/ibkr";
@@ -130,6 +130,22 @@ function Alerts() {
   }
   const ibkrPxBySym = ibkrPxRef.current;
 
+  // Consolidated-tape quotes for HELD symbols that live OUTSIDE the scanner
+  // universe (e.g. a held ETF like CIBR): the scanner feed doesn't carry them,
+  // and IBKR's pre/post snapshot goes stale — this on-demand endpoint tracks
+  // Yahoo's session-aware price for any symbol.
+  const heldSyms = [...new Set(positions.filter((p) => p.quantity > 0).map((p) => p.symbol))].sort();
+  const { data: adhocQuotes } = useQuery({
+    queryKey: ["ts-adhoc-quotes", heldSyms.join(",")],
+    queryFn: () => getTsSymbolQuotes(heldSyms),
+    enabled: heldSyms.length > 0,
+    refetchInterval: 5_000,
+    retry: false,
+  });
+  const adhocBySym = new Map(
+    (adhocQuotes?.quotes ?? []).filter((q) => (q.price ?? 0) > 0).map((q) => [q.symbol, q])
+  );
+
   // Best "current price" for a symbol, session-aware:
   //  - REGULAR hours: IBKR's real-time last is the fresh, tradeable truth.
   //  - PRE/POST (extended) hours: IBKR's LAST-TRADE goes stale in the thin
@@ -139,9 +155,12 @@ function Alerts() {
   // Falls back across sources so a card always has a number.
   const livePrice = (sym: string) => {
     const tsq = quoteBySym.get(sym);
-    const extended = tsq?.session === "PRE" || tsq?.session === "POST";
+    const adhoc = adhocBySym.get(sym);
+    const session = tsq?.session ?? adhoc?.session;
+    const extended = session === "PRE" || session === "POST";
+    const consolidated = tsq?.price ?? adhoc?.price ?? undefined;
     const ibkr = ibkrPxBySym.get(sym);
-    return extended ? (tsq?.price ?? ibkr) : (ibkr ?? tsq?.price);
+    return extended ? (consolidated ?? ibkr) : (ibkr ?? consolidated);
   };
 
   // A held position with P&L recomputed from the live price, so a card's "Now"
