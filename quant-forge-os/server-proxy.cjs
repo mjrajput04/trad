@@ -96,6 +96,44 @@ const ibkrProxy = createProxyMiddleware({
   },
 });
 
+// ---- ssodh/init storm guard --------------------------------------------------
+// Every browser tab that sees a transient 401 fires `ssodh/init {compete:true}`,
+// and each one RE-INITIALIZES the brokerage session — so several tabs (or a
+// second user pointed at this gateway) bounce the session off each other all
+// day. Observed live: 12,000+ init calls in three days and constant flapping.
+// The gateway only ever needs ONE init per minute: forward the first, replay a
+// synthetic OK to everyone else. The server-side keepalive is exempt — it
+// arrives directly on localhost with no X-Forwarded-For.
+const INIT_PATH = /\/v1\/api\/iserver\/auth\/ssodh\/init$/;
+const INIT_MIN_GAP_MS = 60_000;
+let lastInitAt = 0;
+app.use((req, res, next) => {
+  if (req.method !== 'POST' || !INIT_PATH.test(req.path)) return next();
+  const fromBrowser = !!req.headers['x-forwarded-for'];
+  const since = Date.now() - lastInitAt;
+  if (fromBrowser && since < INIT_MIN_GAP_MS) {
+    console.log(`[ibkr] ssodh/init throttled (${Math.round(since / 1000)}s since last)`);
+    const origin = req.headers.origin;
+    if (isAllowedOrigin(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+    }
+    res.setHeader('Content-Type', 'application/json');
+    // Answer with the session's ACTUAL state (same shape ssodh/init returns),
+    // so a throttled tab still learns the truth instead of a falsy stub.
+    return fetch(`http://localhost:${GATEWAY_PORT}/v1/api/iserver/auth/status`, {
+      method: 'POST',
+      headers: { 'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0', cookie: req.headers.cookie || '' },
+    })
+      .then((r) => r.text())
+      .then((t) => res.status(200).send(t && t.trim().startsWith('{') ? t : JSON.stringify({ throttled: true })))
+      .catch(() => res.status(200).send(JSON.stringify({ throttled: true })));
+  }
+  lastInitAt = Date.now();
+  return next();
+});
+
 // Everything else (login UI at /, /v1/api, /sso, static assets, websockets) -> gateway
 app.use('/', ibkrProxy);
 
