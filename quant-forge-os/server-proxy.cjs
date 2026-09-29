@@ -55,6 +55,20 @@ const ibkrProxy = createProxyMiddleware({
   secure: false,
   ws: true,
   logLevel: 'warn',
+  // THE session-flapping root cause (found 2026-09-29): the gateway keys its
+  // session state on the CLIENT IP it sees, and nginx passes the browser's real
+  // public IP in X-Forwarded-For. So the browser got its own session view
+  // ("authenticated:false" → UI red) while the server-side keepalive, arriving
+  // as 127.0.0.1, held an authenticated one. Each side then fired
+  // ssodh/init{compete:true} to take the session back from the other — an
+  // endless ping-pong that logged the user out every few minutes.
+  // Stripping the forwarding headers makes EVERY request look like it comes
+  // from this proxy, so the browser and the keepalive share one session.
+  onProxyReq: (proxyReq) => {
+    proxyReq.removeHeader('x-forwarded-for');
+    proxyReq.removeHeader('x-real-ip');
+    proxyReq.removeHeader('x-forwarded-host');
+  },
   onProxyRes: (proxyRes, req, res) => {
     console.log(`[ibkr] ${proxyRes.statusCode} ${req.method} ${req.url}`);
 
