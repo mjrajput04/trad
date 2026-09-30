@@ -4,6 +4,8 @@ import { LiveDot } from "@/components/Delta";
 import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, verifyOrderLive, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { useAuth } from "@/lib/auth-context";
+import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { SymbolPicker } from "@/components/SymbolPicker";
@@ -49,6 +51,8 @@ export const Route = createFileRoute("/_app/broker")({
 });
 
 function Broker() {
+  const { user } = useAuth();
+  const tradingOff = !useTradingAllowed(user?.email).allowed;
   const qc = useQueryClient();
   const search = Route.useSearch();
   const { isPaper, setIsPaper, paperConfigured, currentAccount } = useTrading();
@@ -393,9 +397,10 @@ function Broker() {
         </div>
 
         <button
-          onClick={confirmAndPlace}
-          disabled={order.isPending || !connected}
-          className={`mt-4 w-full h-11 rounded-lg text-sm font-bold tracking-wide ${side === "BUY" ? "bg-bull glow-bull" : "bg-bear glow-bear"} text-background disabled:opacity-50 inline-flex items-center justify-center gap-2`}
+          onClick={tradingOff ? undefined : confirmAndPlace}
+          disabled={order.isPending || !connected || tradingOff}
+          title={tradingOff ? TRADING_DISABLED_MESSAGE : undefined}
+          className={`mt-4 w-full h-11 rounded-lg text-sm font-bold tracking-wide ${side === "BUY" ? "bg-bull glow-bull" : "bg-bear glow-bear"} text-background disabled:opacity-40 disabled:grayscale disabled:cursor-not-allowed inline-flex items-center justify-center gap-2`}
         >
           {order.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{side} {qty} {symbol}{type === "MKT" ? " MKT" : price > 0 ? ` @ $${price}` : ""}</>}
         </button>

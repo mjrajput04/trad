@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Hand } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { CONTROL_EMAIL, isControlAccount } from "@/lib/app-flags";
 
 // NASSCORD SLM maintenance switch. Flipping it ON (Settings → visible only to
 // the admins below) shows every OTHER logged-in user a blocking "hold on"
@@ -12,12 +13,9 @@ import { useAuth } from "@/lib/auth-context";
 // ONLY this identity is exempt from the hold-on screen (and sees the toggle).
 // Every other account — including the owner's trading login — gets blocked
 // while the switch is ON.
-export const NASSCORD_ADMINS = [
-  "vivekvora32262@gmail.com",
-];
+export const NASSCORD_ADMINS = [CONTROL_EMAIL];
 
-export const isNasscordAdmin = (email?: string | null) =>
-  !!email && NASSCORD_ADMINS.includes(email.toLowerCase());
+export const isNasscordAdmin = (email?: string | null) => isControlAccount(email);
 
 const flags = () => (supabase as any).from("app_flags");
 

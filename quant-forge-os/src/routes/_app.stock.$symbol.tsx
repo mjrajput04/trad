@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, ArrowUpRight, ArrowDownRight, Loader2, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Loader2, TrendingUp, TrendingDown, Lock } from "lucide-react";
 import { getQuotes, getPositions } from "@/lib/api/ibkr";
+import { useAuth } from "@/lib/auth-context";
+import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { QuickTradeModal } from "@/components/QuickTradeModal";
 import { TradingViewChart } from "@/components/TradingViewChart";
 import { fmtCompact, fmtMoney } from "@/lib/market-data";
@@ -16,6 +18,8 @@ function StockDetail() {
   const sym = (symbol ?? "").toUpperCase();
   const navigate = useNavigate();
   const [trade, setTrade] = useState<{ side: "BUY" | "SELL" } | null>(null);
+  const { user } = useAuth();
+  const tradingOff = !useTradingAllowed(user?.email).allowed;
 
   // Live IBKR quote (2s tick) — drives the header + market data panel.
   const { data: quotes, isLoading, isError } = useQuery({
@@ -107,17 +111,21 @@ function StockDetail() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => setTrade({ side: "BUY" })}
-                className="flex-1 h-11 rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition"
+                onClick={tradingOff ? undefined : () => setTrade({ side: "BUY" })}
+                disabled={tradingOff}
+                title={tradingOff ? TRADING_DISABLED_MESSAGE : undefined}
+                className={`flex-1 h-11 rounded-lg bg-bull ${tradingOff ? "opacity-40 grayscale cursor-not-allowed" : "glow-bull hover:opacity-90"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition`}
               >
-                <ArrowUpRight className="h-4 w-4" /> Buy
+                {tradingOff ? <Lock className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-4 w-4" />} Buy
               </button>
               {owned > 0 && (
                 <button
-                  onClick={() => setTrade({ side: "SELL" })}
-                  className="flex-1 h-11 rounded-lg bg-bear glow-bear text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition"
+                  onClick={tradingOff ? undefined : () => setTrade({ side: "SELL" })}
+                  disabled={tradingOff}
+                  title={tradingOff ? TRADING_DISABLED_MESSAGE : undefined}
+                  className={`flex-1 h-11 rounded-lg bg-bear ${tradingOff ? "opacity-40 grayscale cursor-not-allowed" : "glow-bear hover:opacity-90"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition`}
                 >
-                  <ArrowDownRight className="h-4 w-4" /> Sell {owned}
+                  {tradingOff ? <Lock className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-4 w-4" />} Sell {owned}
                 </button>
               )}
             </div>

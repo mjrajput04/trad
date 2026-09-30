@@ -3,7 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Delta } from "@/components/Delta";
 import { fmtMoney } from "@/lib/market-data";
 import { getPositions, closePosition, type Position } from "@/lib/api/ibkr";
-import { AlertTriangle, Loader2, X } from "lucide-react";
+import { AlertTriangle, Loader2, X, Lock } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/positions")({
@@ -13,6 +15,8 @@ export const Route = createFileRoute("/_app/positions")({
 
 function Positions() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const tradingOff = !useTradingAllowed(user?.email).allowed;
 
   const { data: positions = [], isLoading, isError, error } = useQuery({
     queryKey: ["ibkr-positions"],
@@ -99,10 +103,10 @@ function Positions() {
                   <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.side === "LONG" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{r.side}</span>
                 </div>
                 <div className="col-span-1 flex justify-end">
-                  <button onClick={() => confirmClose(r)} disabled={close.isPending}
-                    title={`Close position (${r.quantity > 0 ? "SELL" : "BUY"} ${Math.abs(r.quantity)} @ MKT)`}
-                    className="h-7 w-7 rounded-md hairline bg-surface-2 hover:bg-bear/20 grid place-items-center transition disabled:opacity-50">
-                    <X className="h-3.5 w-3.5 text-bear" />
+                  <button onClick={tradingOff ? undefined : () => confirmClose(r)} disabled={close.isPending || tradingOff}
+                    title={tradingOff ? TRADING_DISABLED_MESSAGE : `Close position (${r.quantity > 0 ? "SELL" : "BUY"} ${Math.abs(r.quantity)} @ MKT)`}
+                    className="h-7 w-7 rounded-md hairline bg-surface-2 hover:bg-bear/20 grid place-items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+                    {tradingOff ? <Lock className="h-3 w-3 text-muted-foreground" /> : <X className="h-3.5 w-3.5 text-bear" />}
                   </button>
                 </div>
               </div>

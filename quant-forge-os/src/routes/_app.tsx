@@ -3,7 +3,9 @@ import React, { Component, useEffect, type ReactNode } from "react";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { TopNav } from "@/components/TopNav";
 import { Topbar } from "@/components/Topbar";
+import { isControlAccount, setRuntimeTradingAllowed, useTradingAllowed } from "@/lib/app-flags";
 import { Ticker } from "@/components/Ticker";
 import { useAuth } from "@/lib/auth-context";
 
@@ -47,9 +49,20 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { error: Err
 }
 
 function AppLayout() {
-  const { session, loading } = useAuth();
+  const { session, loading, user } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // The control account keeps the original sidebar terminal. Every other
+  // account gets the horizontal top-nav layout.
+  const control = isControlAccount(user?.email);
+  const { allowed } = useTradingAllowed(user?.email);
+
+  // Mirror the permission into the broker layer so an order is refused even if
+  // a disabled button were re-enabled by hand.
+  useEffect(() => {
+    setRuntimeTradingAllowed(allowed);
+  }, [allowed]);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -61,6 +74,21 @@ function AppLayout() {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!control) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <MaintenanceGate />
+        <TopNav />
+        <Ticker />
+        <main className="flex-1 min-w-0 overflow-x-hidden">
+          <RouteErrorBoundary key={pathname}>
+            <Outlet />
+          </RouteErrorBoundary>
+        </main>
       </div>
     );
   }

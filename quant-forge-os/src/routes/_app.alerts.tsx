@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
   AlertTriangle, Loader2, Trophy, Bell, Newspaper,
-  ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingDown,
+  ArrowUpRight, ArrowDownRight, Gauge, Clock, TrendingDown, Lock,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import {
   getTsAlerts, getTsQuotes, getTsBacktest, getTsSymbolQuotes, bracketStop,
   type TsAlert, type TsBacktest,
@@ -516,22 +518,33 @@ function HoldingCard({ p, now, onBuy, onSell }: {
 }
 
 // Shared Buy / (Sell when holding) button pair for the alert cards.
+// When trading is switched off for this account the pair renders faded and
+// inert — the card still shows the setup, it just cannot be acted on.
 function TradeButtons({ owned, onBuy, onSell, tall }: { owned: number; onBuy: () => void; onSell: () => void; tall?: boolean }) {
   const h = tall ? "h-10" : "h-9";
+  const { user } = useAuth();
+  const { allowed } = useTradingAllowed(user?.email);
+  const off = !allowed;
+  const dim = off ? "opacity-40 cursor-not-allowed grayscale" : "hover:opacity-90";
+  const title = off ? TRADING_DISABLED_MESSAGE : undefined;
   return (
     <div className="flex gap-2 mt-auto">
       <button
-        onClick={onBuy}
-        className={`flex-1 ${h} rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition`}
+        onClick={off ? undefined : onBuy}
+        disabled={off}
+        title={title}
+        className={`flex-1 ${h} rounded-lg bg-bull ${off ? "" : "glow-bull"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition ${dim}`}
       >
-        <ArrowUpRight className="h-4 w-4" /> Buy
+        {off ? <Lock className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-4 w-4" />} Buy
       </button>
       {owned > 0 && (
         <button
-          onClick={onSell}
-          className={`flex-1 ${h} rounded-lg bg-bear glow-bear text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition`}
+          onClick={off ? undefined : onSell}
+          disabled={off}
+          title={title}
+          className={`flex-1 ${h} rounded-lg bg-bear ${off ? "" : "glow-bear"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition ${dim}`}
         >
-          <ArrowDownRight className="h-4 w-4" /> Sell {owned}
+          {off ? <Lock className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-4 w-4" />} Sell {owned}
         </button>
       )}
     </div>

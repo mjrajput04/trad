@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Sparkles, Loader2, Trophy, Clock, Gauge, Zap, TrendingDown,
+  Sparkles, Loader2, Trophy, Clock, Gauge, Zap, TrendingDown, Lock,
 } from "lucide-react";
 import { useFnoSignals, type FnoSignal } from "@/lib/fno-signals";
 import { getTsBacktest, type TsBacktest, type TsAlert } from "@/lib/api/alerts";
@@ -10,6 +10,19 @@ import { OptionTradeModal, fmtExpiry } from "@/components/OptionTradeModal";
 import { Level, LevelBar } from "@/components/TradeLevels";
 import { type OptionContract, type OptionQuote } from "@/lib/api/ibkr";
 import { fmtMoney } from "@/lib/market-data";
+import { useAuth } from "@/lib/auth-context";
+import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
+
+/** Buy/Sell gating: faded + inert while trading is switched off for this account. */
+function useTradeGate() {
+  const { user } = useAuth();
+  const off = !useTradingAllowed(user?.email).allowed;
+  return {
+    off,
+    title: off ? TRADING_DISABLED_MESSAGE : undefined,
+    cls: off ? "opacity-40 grayscale cursor-not-allowed" : "hover:opacity-90",
+  };
+}
 
 export const Route = createFileRoute("/_app/fno-alerts")({
   head: () => ({ meta: [{ title: "AI F&O Alerts · NOVA" }, { name: "description", content: "Live AI options signals — each a backtested stock setup expressed as a call or put, with premium entry / target / stop." }] }),
@@ -122,6 +135,7 @@ function Meta({ s }: { s: FnoSignal }) {
 }
 
 function FnoBest({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
+  const gate = useTradeGate();
   const isCall = s.right === "C";
   return (
     <div className="rounded-2xl glass p-5 relative overflow-hidden">
@@ -151,10 +165,12 @@ function FnoBest({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
         <div className="flex flex-col items-stretch gap-3 w-full sm:w-auto sm:min-w-[300px]">
           <Levels s={s} />
           <button
-            onClick={onTrade}
-            className={`h-10 rounded-lg text-sm font-bold text-background inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition ${isCall ? "bg-bull glow-bull" : "bg-bear glow-bear"}`}
+            onClick={gate.off ? undefined : onTrade}
+            disabled={gate.off}
+            title={gate.title}
+            className={`h-10 rounded-lg text-sm font-bold text-background inline-flex items-center justify-center gap-1.5 transition ${gate.cls} ${isCall ? (gate.off ? "bg-bull" : "bg-bull glow-bull") : (gate.off ? "bg-bear" : "bg-bear glow-bear")}`}
           >
-            <Zap className="h-4 w-4" /> Trade {s.label}
+            {gate.off ? <Lock className="h-3.5 w-3.5" /> : <Zap className="h-4 w-4" />} Trade {s.label}
           </button>
         </div>
       </div>
@@ -163,6 +179,7 @@ function FnoBest({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
 }
 
 function FnoCard({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
+  const gate = useTradeGate();
   const isCall = s.right === "C";
   return (
     <div className="rounded-2xl glass p-4 flex flex-col gap-3 border border-surface-2">
@@ -186,10 +203,12 @@ function FnoCard({ s, onTrade }: { s: FnoSignal; onTrade: () => void }) {
         </div>
       )}
       <button
-        onClick={onTrade}
-        className={`mt-auto h-9 rounded-lg text-sm font-bold text-background inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition ${isCall ? "bg-bull glow-bull" : "bg-bear glow-bear"}`}
+        onClick={gate.off ? undefined : onTrade}
+        disabled={gate.off}
+        title={gate.title}
+        className={`mt-auto h-9 rounded-lg text-sm font-bold text-background inline-flex items-center justify-center gap-1.5 transition ${gate.cls} ${isCall ? (gate.off ? "bg-bull" : "bg-bull glow-bull") : (gate.off ? "bg-bear" : "bg-bear glow-bear")}`}
       >
-        <Zap className="h-4 w-4" /> Trade {s.label}
+        {gate.off ? <Lock className="h-3.5 w-3.5" /> : <Zap className="h-4 w-4" />} Trade {s.label}
       </button>
     </div>
   );

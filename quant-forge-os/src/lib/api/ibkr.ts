@@ -1,3 +1,5 @@
+import { isRuntimeTradingAllowed, TRADING_DISABLED_MESSAGE } from "@/lib/trade-guard";
+
 // IBKR Client Portal Gateway API layer.
 // Dev: requests go through the vite proxy at /ibkr (see vite.config.ts).
 // Prod: requests go directly to the gateway proxy (backend.nassphx.com) with
@@ -649,6 +651,7 @@ export async function placeOrder(params: PlaceOrderParams) {
     throw new Error(`${orderType} orders need a price`);
   }
 
+  if (!isRuntimeTradingAllowed()) throw new Error(TRADING_DISABLED_MESSAGE);
   if (!CURRENT_ACCOUNT) {
     throw new Error("IBKR account not detected yet — log in to the gateway, then retry.");
   }
@@ -764,6 +767,7 @@ export async function cancelWorkingOrders(filter: { symbol?: string; conid?: num
 
 export async function closePosition(conid: number, quantity: number) {
   if (!quantity) throw new Error("Nothing to close");
+  if (!isRuntimeTradingAllowed()) throw new Error(TRADING_DISABLED_MESSAGE);
   if (!CURRENT_ACCOUNT) {
     throw new Error("IBKR account not detected yet — log in to the gateway, then retry.");
   }

@@ -6,6 +6,7 @@ import { useTrading } from "@/lib/trading-context";
 import { getAuthStatus, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
 import { AdminUsers } from "@/components/AdminUsers";
 import { NasscordToggle, isNasscordAdmin } from "@/components/MaintenanceGate";
+import { TradingControl } from "@/components/TradingControl";
 
 const ADMIN_EMAIL = "nssphx@gmail.com";
 
@@ -84,6 +85,8 @@ function Settings() {
             : "Paper mode is disabled — set VITE_IBKR_PAPER_ACCOUNT_ID to your paper account to enable it."}
         </div>
       </section>
+
+      {isNasscordAdmin(user?.email) && <TradingControl />}
 
       {isNasscordAdmin(user?.email) && <NasscordToggle />}
 
