@@ -315,6 +315,10 @@
   .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 8px; }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 
+  /* the top-nav strip scrolls when space is tight, without showing a bar */
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
   .ticker-track {
     animation: ticker-scroll 60s linear infinite;
   }

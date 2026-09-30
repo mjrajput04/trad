@@ -3,11 +3,10 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  BellRing, Sparkles, Layers, ListOrdered, History, BarChart3,
-  Eye, Coins, Radar, Wallet, Plug, Settings as SettingsIcon,
-  TrendingUp, ChevronDown, Plug2, Loader2, LogOut, Sun, Moon, Lock,
+  BellRing, Sparkles, Layers, ListOrdered, Wallet, Eye, Coins,
+  BarChart3, History, Radar, Plug, Settings as SettingsIcon,
+  TrendingUp, ChevronDown, Loader2, LogOut, Sun, Moon, Lock, Search, X,
 } from "lucide-react";
-import { LiveDot } from "./Delta";
 import { SymbolSearch } from "./SymbolSearch";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme";
@@ -19,42 +18,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-// Horizontal navigation used by every account except the control one, which
-// keeps the original sidebar layout. Two slim rows: identity + status on top,
-// the sections underneath — no sidebar, so the content gets the full width.
+// Single-row navigation used by every account except the control one, which
+// keeps the original sidebar terminal. Logo, every section and the account
+// controls share one bar, so the page below gets the full width.
 
-const PRIMARY = [
+const NAV = [
   { to: "/alerts", label: "Alerts", icon: BellRing },
   { to: "/fno-alerts", label: "F&O", icon: Sparkles },
   { to: "/positions", label: "Positions", icon: Layers },
   { to: "/orders", label: "Orders", icon: ListOrdered },
-  { to: "/history", label: "History", icon: History },
-  { to: "/analysis", label: "Analysis", icon: BarChart3 },
-] as const;
-
-const MORE = [
-  { to: "/watchlist", label: "Watchlist", icon: Eye },
-  { to: "/options", label: "F&O Options", icon: Coins },
-  { to: "/scanner", label: "Scanner", icon: Radar },
   { to: "/portfolio", label: "Portfolio", icon: Wallet },
-  { to: "/broker", label: "Broker / IBKR", icon: Plug },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { to: "/watchlist", label: "Watchlist", icon: Eye },
+  { to: "/options", label: "Options", icon: Coins },
+  { to: "/analysis", label: "Analysis", icon: BarChart3 },
+  { to: "/history", label: "History", icon: History },
+  { to: "/scanner", label: "Scanner", icon: Radar },
 ] as const;
 
-function NavLink({ to, label, icon: Icon }: { to: string; label: string; icon: any }) {
+function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: any }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const active = pathname === to;
+  const active = pathname === to || (to === "/alerts" && pathname === "/");
   return (
     <Link
       to={to}
       className={cn(
-        "relative inline-flex items-center gap-1.5 px-3 h-full text-[13px] font-medium whitespace-nowrap transition-colors",
-        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        "inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg text-[13px] whitespace-nowrap transition-colors",
+        active
+          ? "bg-surface-2 text-foreground font-semibold"
+          : "text-muted-foreground font-medium hover:bg-surface-2/60 hover:text-foreground",
       )}
     >
-      <Icon className={cn("h-3.5 w-3.5", active && "text-primary")} />
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", active && "text-primary")} />
       {label}
-      {active && <span className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full bg-primary" />}
     </Link>
   );
 }
@@ -62,12 +57,12 @@ function NavLink({ to, label, icon: Icon }: { to: string; label: string; icon: a
 export function TopNav() {
   const [now, setNow] = useState<Date | null>(null);
   const [reviving, setReviving] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { user, signOut } = useAuth();
   const [theme, toggleTheme] = useTheme();
   const { allowed } = useTradingAllowed(user?.email);
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const { data: authStatus } = useQuery({
     queryKey: ["ibkr-auth"],
@@ -103,68 +98,61 @@ export function TopNav() {
   const et = now ? new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" })) : null;
   const weekday = et ? et.getDay() >= 1 && et.getDay() <= 5 : false;
   const mins = et ? et.getHours() * 60 + et.getMinutes() : 0;
-  const session: "PRE" | "OPEN" | "AFTER" | "CLOSED" = !weekday
-    ? "CLOSED"
-    : mins >= 9 * 60 + 30 && mins < 16 * 60
-      ? "OPEN"
-      : mins >= 4 * 60 && mins < 9 * 60 + 30
-        ? "PRE"
-        : mins >= 16 * 60 && mins < 20 * 60
-          ? "AFTER"
-          : "CLOSED";
-  const sessionStyle = {
-    OPEN: "bg-bull/10 text-bull", PRE: "bg-warn/10 text-warn",
-    AFTER: "bg-violet/10 text-violet", CLOSED: "bg-bear/10 text-bear",
-  }[session];
-  const sessionLabel = { OPEN: "Market Open", PRE: "Pre-market", AFTER: "After-hours", CLOSED: "Closed" }[session];
-  const time = et ? et.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : "--:--";
+  const open = weekday && mins >= 9 * 60 + 30 && mins < 16 * 60;
 
   const ibkrOk = !!authStatus?.authenticated;
   const email = user?.email ?? "";
   const initials = (email.split("@")[0] || "U").slice(0, 2).toUpperCase();
-  const moreActive = MORE.some((m) => m.to === pathname);
 
   return (
     <header className="sticky top-0 z-30 bg-[var(--topbar-bg)] backdrop-blur-xl hairline-b">
-      {/* row 1 — identity, session, search, status */}
-      <div className="h-14 flex items-center gap-3 px-3 md:px-5">
-        <Link to="/alerts" className="flex items-center gap-2.5 shrink-0">
+      <div className="h-14 flex items-center gap-1.5 px-3 md:px-4">
+        {/* brand */}
+        <Link to="/alerts" className="flex items-center gap-2 shrink-0 mr-1">
           <div className="h-7 w-7 rounded-lg gradient-primary grid place-items-center glow-primary">
             <TrendingUp className="h-4 w-4 text-background" strokeWidth={2.5} />
           </div>
-          <div className="leading-tight hidden sm:block">
-            <div className="text-sm font-semibold tracking-tight">NOVA</div>
-            <div className="text-[9px] text-muted-foreground uppercase tracking-[0.2em]">Terminal</div>
-          </div>
+          <span className="text-sm font-bold tracking-tight hidden sm:inline">NOVA</span>
         </Link>
 
-        <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap shrink-0 ${sessionStyle}`}>
-          <LiveDot />
-          <span className="hidden sm:inline">{sessionLabel}</span>
-          <span className="num hidden lg:inline opacity-70">· {time} ET</span>
-        </div>
+        {/* sections — the whole middle of the bar, scrolls when space is tight */}
+        <nav className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto scrollbar-none">
+          {NAV.map((n) => <NavItem key={n.to} {...n} />)}
+        </nav>
 
-        <SymbolSearch />
-
-        <div className="flex items-center gap-2 shrink-0">
+        {/* account controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {!allowed && (
-            <div
+            <span
               title="Trading is switched off for this account"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-surface-2 hairline px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+              className="hidden lg:inline-flex items-center gap-1 rounded-md bg-surface-2 hairline px-2 py-1 text-[11px] font-medium text-muted-foreground"
             >
               <Lock className="h-3 w-3" /> View only
-            </div>
+            </span>
           )}
+
+          <button
+            onClick={() => setSearchOpen((v) => !v)}
+            title="Search symbols"
+            className="h-9 w-9 grid place-items-center rounded-lg hairline bg-surface-1 hover:bg-surface-2 text-muted-foreground hover:text-foreground transition"
+          >
+            {searchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+          </button>
+
           <button
             onClick={() => (ibkrOk ? navigate({ to: "/broker" }) : reviveOrLogin())}
             disabled={reviving}
-            title={ibkrOk ? "IBKR session active" : "Tap to reconnect"}
-            className={`inline-flex items-center gap-2 rounded-lg hairline px-2.5 md:px-3 h-9 text-xs transition disabled:opacity-60 ${
+            title={ibkrOk ? "IBKR session active" : "Session expired — tap to reconnect"}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 h-9 text-[11px] font-semibold transition disabled:opacity-60 ${
               ibkrOk ? "bg-bull/10 text-bull hover:bg-bull/20" : "bg-bear/10 text-bear hover:bg-bear/20"
             }`}
           >
-            {reviving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug2 className="h-3.5 w-3.5" />}
-            <span className="hidden md:inline">{ibkrOk ? "Connected" : reviving ? "Reconnecting…" : "Reconnect"}</span>
+            {reviving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <span className={`h-1.5 w-1.5 rounded-full ${ibkrOk ? "bg-bull" : "bg-bear"}`} />
+            )}
+            <span className="hidden md:inline">{ibkrOk ? (open ? "Live" : "Connected") : "Expired"}</span>
           </button>
 
           <button
@@ -177,8 +165,12 @@ export function TopNav() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-9 w-9 rounded-full gradient-primary grid place-items-center text-[11px] font-bold text-background hover:opacity-90 transition">
-                {initials}
+              <button className="inline-flex items-center gap-1.5 h-9 rounded-lg hairline bg-surface-1 hover:bg-surface-2 px-2 md:px-2.5 text-[12px] text-foreground transition">
+                <span className="md:hidden h-6 w-6 rounded-full gradient-primary grid place-items-center text-[10px] font-bold text-background">
+                  {initials}
+                </span>
+                <span className="hidden md:inline max-w-[170px] truncate">{email}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -187,9 +179,13 @@ export function TopNav() {
                 <span className="truncate text-sm">{email}</span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate({ to: "/broker" })}>
+                <Plug className="h-4 w-4 mr-2" /> Broker / IBKR
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => navigate({ to: "/settings" })}>
                 <SettingsIcon className="h-4 w-4 mr-2" /> Settings
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => signOut()} className="text-bear focus:text-bear">
                 <LogOut className="h-4 w-4 mr-2" /> Sign out
               </DropdownMenuItem>
@@ -198,30 +194,12 @@ export function TopNav() {
         </div>
       </div>
 
-      {/* row 2 — sections */}
-      <div className="h-11 flex items-stretch px-1 md:px-4 hairline-t overflow-x-auto scrollbar-thin">
-        {PRIMARY.map((n) => <NavLink key={n.to} {...n} />)}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "relative inline-flex items-center gap-1.5 px-3 h-full text-[13px] font-medium whitespace-nowrap transition-colors",
-                moreActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              More <ChevronDown className="h-3.5 w-3.5" />
-              {moreActive && <span className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full bg-primary" />}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52">
-            {MORE.map((m) => (
-              <DropdownMenuItem key={m.to} onSelect={() => navigate({ to: m.to })}>
-                <m.icon className="h-4 w-4 mr-2" /> {m.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {/* search drops under the bar so the nav row stays one clean line */}
+      {searchOpen && (
+        <div className="hairline-t px-3 md:px-4 py-2 flex items-center">
+          <SymbolSearch />
+        </div>
+      )}
     </header>
   );
 }
