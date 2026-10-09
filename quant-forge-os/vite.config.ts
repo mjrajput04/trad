@@ -13,6 +13,8 @@ const GATEWAY = process.env.VITE_IBKR_GATEWAY_URL ?? "https://backend.nassphx.co
 // TradeScope alerts engine is proxied by nginx at nassphx.com/ts-api → :3100.
 // In dev we forward /ts-api to the live site so the alerts dashboard works locally.
 const TS_ENGINE = process.env.VITE_TS_ENGINE_URL ?? "https://nassphx.com";
+// NOVA Engine (nova-engine on the VPS) is proxied by nginx at nassphx.com/engine-api.
+const NOVA_ENGINE = process.env.VITE_NOVA_ENGINE_URL ?? "https://nassphx.com";
 
 export default defineConfig({
   nitro: { preset: "node-server" },
@@ -44,6 +46,11 @@ export default defineConfig({
         },
         "/admin-api": {
           target: TS_ENGINE,
+          changeOrigin: true,
+          secure: false,
+        },
+        "/engine-api": {
+          target: NOVA_ENGINE,
           changeOrigin: true,
           secure: false,
         },

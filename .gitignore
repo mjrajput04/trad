@@ -44,3 +44,9 @@ android-app/app/build/
 
 # Markdown docs are kept out of the repo
 *.md
+
+# NOVA Engine runtime state + lab data
+nova-engine/data/
+nova-engine/lab/data/
+nova-engine/lab/*.json
+nova-engine/lab/*.txt
