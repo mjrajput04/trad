@@ -18,7 +18,6 @@ import {
   X,
   PanelLeftClose,
   ChevronRight,
-  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,10 +34,7 @@ const NAV = [
   { to: "/analysis", label: "Analysis", icon: BarChart3 },
 ] as const;
 
-// This sidebar only renders for the control account (see _app.tsx), so the
-// private engine link never shows up for anyone else.
 const SYS = [
-  { to: "/engine", label: "Engine", icon: Cpu },
   { to: "/broker", label: "Broker / IBKR", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
