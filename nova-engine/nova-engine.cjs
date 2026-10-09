@@ -275,7 +275,7 @@ const SCANS = ["HIGH_OPEN_GAP", "LOW_OPEN_GAP", "TOP_PERC_GAIN", "TOP_PERC_LOSE"
 
 let scanBusy = false;
 async function scan() {
-  if (scanBusy) return;
+  if (scanBusy || Date.now() < (state.day.nextScanAt || 0)) return;
   scanBusy = true;
   const day = state.day;
   const cfg = state.config;
@@ -307,7 +307,7 @@ async function scan() {
       await sleep(1100); // scanner pacing: 1 req/s
     }
     day.universe = uni.size;
-    if (!uni.size) { log("warn", "scanners returned nothing"); return; }
+    if (!uni.size) { log("warn", "scanners returned nothing — retrying in 30s"); day.nextScanAt = Date.now() + 30000; return; }
 
     // Gap pre-filter from one snapshot pass, so history is fetched only for real gappers.
     const snaps = await snapshot([...uni.keys()]);
@@ -475,13 +475,20 @@ async function enter(p, q) {
     status: "pending", opened: Date.now(), closed: null, exit: null, why: "", pnl: 0, last: ref,
     orders: {},
   };
+  // Track the position BEFORE submitting: if the submit errors half-way the
+  // order may still exist at IBKR, and liveStep/flatten find it by cOID.
+  day.positions.push(pos);
   if (state.mode === "paper") {
     pos.entry = round2(ref + dir * 0.01);
     pos.status = "open";
   } else {
-    await placeBracket(pos);
+    try {
+      await placeBracket(pos);
+    } catch (e) {
+      pos.why = `submit error: ${e.message.slice(0, 60)}`;
+      throw e;
+    }
   }
-  day.positions.push(pos);
   p.status = "entered";
   log("trade", `${pos.kind.toUpperCase()} ${dir > 0 ? "BUY" : "SHORT"} ${qty} ${p.symbol} @~${pos.ref} stop ${stop} target ${target} (risk $${pos.riskUsd})`);
 }
@@ -526,7 +533,21 @@ async function liveOrders() {
   const rows = j?.orders || [];
   const byRef = new Map();
   for (const o of rows) if (o.order_ref) byRef.set(o.order_ref, o);
+  byRef.rows = rows;
   return byRef;
+}
+
+const TERMINAL = ["Filled", "Cancelled", "Inactive"];
+// Bracket child by our cOID; if IBKR did not keep the child's ref, fall back to
+// the same contract + closing side + order type.
+function findChild(book, p, kind) {
+  const byRef = book.get(kind === "sl" ? p.orders.sl : p.orders.tp);
+  if (byRef) return byRef;
+  const side = p.dir > 0 ? "SELL" : "BUY";
+  const type = kind === "sl" ? /^stop/i : /^limit/i;
+  return (book.rows || []).find((o) =>
+    Number(o.conid) === p.conid && o.side === side && type.test(o.orderType || "") &&
+    Number(o.totalSize || 0) === p.qty && o.order_ref !== p.orders.parent);
 }
 
 async function cancelOrder(orderId) {
@@ -606,8 +627,8 @@ function paperStep(p, q) {
 
 function liveStep(p, byRef) {
   const parent = byRef.get(p.orders.parent);
-  const sl = byRef.get(p.orders.sl);
-  const tp = byRef.get(p.orders.tp);
+  const sl = findChild(byRef, p, "sl");
+  const tp = findChild(byRef, p, "tp");
   if (parent) p.orders.parentId = parent.orderId;
   if (sl) p.orders.slId = sl.orderId;
   if (tp) p.orders.tpId = tp.orderId;
@@ -649,33 +670,73 @@ async function closeOneInner(p, why) {
     const px = q ? (p.dir > 0 ? q.bid || q.last : q.ask || q.last) : p.last;
     return closePos(p, px - p.dir * 0.01, why);
   }
-  // live: cancel the bracket children, then close only what is really held
-  const byRef = await liveOrders();
-  for (const ref of [p.orders.sl, p.orders.tp, p.orders.parent]) {
-    const o = byRef.get(ref);
-    if (o && !["Filled", "Cancelled", "Inactive"].includes(o.status)) await cancelOrder(o.orderId);
+  // live: cancel the bracket, confirm the children are dead, then close only
+  // what is really held. A MKT close is NEVER sent while a stop/target child
+  // might still be working — if it filled afterwards the position would flip.
+  // Anything unclear returns without closing; callers retry on the next tick.
+  const book = await liveOrders();
+  const par = book.get(p.orders.parent);
+  if (!par) {
+    // Not in the order book: never placed, or the book is unreadable (flap).
+    const held = await livePositionQty(p.conid);
+    if (p.status === "pending" && held != null && Math.sign(held) !== p.dir) {
+      p.status = "cancelled";
+      p.why = `${why} (entry never filled)`;
+      return;
+    }
+    if (!p.warnedBook) { p.warnedBook = true; log("warn", `LIVE ${p.symbol}: orders not visible at IBKR — retrying close`); }
+    return;
   }
-  await sleep(1500);
-  const after = await liveOrders();
-  const sl = after.get(p.orders.sl), tp = after.get(p.orders.tp);
-  if (sl?.status === "Filled") return closePos(p, num(sl.avgPrice) || p.stop, "stop");
-  if (tp?.status === "Filled") return closePos(p, num(tp.avgPrice) || p.target, "target");
+  for (const o of [findChild(book, p, "sl"), findChild(book, p, "tp"), par]) {
+    if (o && !TERMINAL.includes(o.status)) await cancelOrder(o.orderId);
+  }
+  let after = book, sl, tp;
+  for (let i = 0; i < 4; i++) {
+    await sleep(1500);
+    after = await liveOrders();
+    sl = findChild(after, p, "sl");
+    tp = findChild(after, p, "tp");
+    if (sl?.status === "Filled") return closePos(p, num(sl.avgPrice) || p.stop, "stop");
+    if (tp?.status === "Filled") return closePos(p, num(tp.avgPrice) || p.target, "target");
+    if (after.get(p.orders.parent) && (!sl || TERMINAL.includes(sl.status)) && (!tp || TERMINAL.includes(tp.status))) break;
+    sl = tp = { status: "unknown" };
+  }
+  if (!after.get(p.orders.parent) || (sl && !TERMINAL.includes(sl.status)) || (tp && !TERMINAL.includes(tp.status))) {
+    log("warn", `LIVE ${p.symbol}: bracket not confirmed cancelled — retrying close`);
+    return;
+  }
   if (p.status === "pending") {
-    const par = after.get(p.orders.parent);
-    if (par?.status !== "Filled") { p.status = "cancelled"; p.why = why; return; }
-    p.entry = num(par.avgPrice) || p.ref;
+    const pp = after.get(p.orders.parent);
+    if (pp.status !== "Filled") { p.status = "cancelled"; p.why = why; return; }
+    p.entry = num(pp.avgPrice) || p.ref;
   }
   const held = await livePositionQty(p.conid);
-  if (held == null) { log("error", `LIVE ${p.symbol}: cannot read position — close it by hand`); p.why = "CHECK MANUALLY"; return; }
+  if (held == null) {
+    if (!p.warnedPos) { p.warnedPos = true; log("error", `LIVE ${p.symbol}: cannot read position — retrying; close by hand if this repeats`); }
+    return;
+  }
   const qty = Math.min(p.qty, Math.abs(held));
   if (qty < 1 || Math.sign(held) !== p.dir) {
     log("warn", `LIVE ${p.symbol}: nothing left to close (held ${held})`);
     return closePos(p, p.last, `${why} (already flat)`);
   }
-  await submit([{ acctId: gwStatus.account, conid: p.conid, cOID: `${p.orders.parent}-x${Date.now() % 1000}`, orderType: "MKT", side: p.dir > 0 ? "SELL" : "BUY", quantity: qty, tif: "DAY" }]);
+  const ref = `${p.orders.parent}-x${Date.now() % 1000}`;
+  await submit([{ acctId: gwStatus.account, conid: p.conid, cOID: ref, orderType: "MKT", side: p.dir > 0 ? "SELL" : "BUY", quantity: qty, tif: "DAY" }]);
   await sleep(2000);
+  const final = await liveOrders();
+  // Belt and braces: kill any closing-side order still working on this contract
+  // (a bracket child IBKR listed under an unexpected ref/type).
+  const closeSide = p.dir > 0 ? "SELL" : "BUY";
+  for (const o of final.rows || []) {
+    if (Number(o.conid) === p.conid && o.side === closeSide && o.order_ref !== ref && !TERMINAL.includes(o.status) &&
+        String(o.order_ref || "").startsWith(p.orders.parent)) {
+      log("warn", `LIVE ${p.symbol}: cancelling leftover order ${o.orderId}`);
+      await cancelOrder(o.orderId);
+    }
+  }
+  const fill = final.get(ref);
   const q = (await snapshot([p.conid])).get(p.conid);
-  closePos(p, q?.last || p.last, why);
+  closePos(p, num(fill?.avgPrice) || q?.last || p.last, why);
 }
 
 async function flattenAll(why) {
@@ -723,10 +784,16 @@ async function tick() {
       day.phase = day.halted ? "halted" : "managing";
       if (gwStatus.authenticated) await manage();
     } else if (!day.flattened) {
+      // Retried every tick until nothing is left open: brackets are DAY
+      // orders, so a position that survives 16:00 would sit unprotected.
       day.phase = "flattening";
-      day.flattened = true;
-      await flattenAll("eod");
-      writeJournal(day);
+      if (gwStatus.authenticated || day.positions.every((p) => p.kind === "paper")) await flattenAll("eod");
+      day.flattened = !day.positions.some((p) => p.status === "open" || p.status === "pending");
+      if (day.flattened) writeJournal(day);
+      else if (t.min >= 16 * 60 && !day.flattenWarned) {
+        day.flattenWarned = true;
+        log("error", "EOD flatten incomplete — check IBKR positions by hand");
+      }
     } else {
       day.phase = "done";
     }
