@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('node:http');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
@@ -49,8 +50,21 @@ app.get('/health', (req, res) => {
 //     during login AND can be sent cross-site by the app at nassphx.com,
 //   - rewrite absolute localhost redirects to relative so the flow stays on
 //     backend.nassphx.com.
+// A FRESH connection per request to the gateway (found 2026-10-26).
+//
+// Node 19 made `http.globalAgent` keep-alive by default, and the proxy was
+// using it. The Java gateway closes pooled connections on its own schedule, so
+// a reused socket would hand Node the tail of one response as the head of the
+// next: "Parse Error: Expected HTTP/, RTSP/ or ICE/" (HPE_INVALID_CONSTANT) and
+// a 502 back to the browser. It struck whole bursts of parallel requests — the
+// login page's own CSS and JS — so the sign-in silently could not complete,
+// while a sequential curl from the server always passed and looked healthy.
+// The gateway is on loopback, so a connection per request costs nothing.
+const gatewayAgent = new http.Agent({ keepAlive: false, maxSockets: 128 });
+
 const ibkrProxy = createProxyMiddleware({
   target: `http://localhost:${GATEWAY_PORT}`,
+  agent: gatewayAgent,
   changeOrigin: true,
   secure: false,
   ws: true,
