@@ -116,6 +116,26 @@ const ibkrProxy = createProxyMiddleware({
     }
   },
   onError: (err, req, res) => {
+    // The gateway (a 2023 build) now and then answers with something Node
+    // cannot parse at all — "Parse Error: Expected HTTP/, RTSP/ or ICE/"
+    // (HPE_INVALID_CONSTANT). It is not reproducible from this box under any
+    // load or header combination, but a real browser loading the login page
+    // hits it often enough that the page arrives without its CSS and
+    // JavaScript, and the sign-in then silently cannot run.
+    //
+    // A GET carries no body and asks the gateway to change nothing, so asking
+    // again on a fresh connection is safe and almost always returns a clean
+    // response. Anything with a body is never retried — an order must never be
+    // sent twice because a response was unreadable.
+    const unparseable =
+      err && (err.code === 'HPE_INVALID_CONSTANT' || /Parse Error/i.test(err.message || ''));
+    if (unparseable && req.method === 'GET' && res && !res.headersSent) {
+      req.__gwRetries = (req.__gwRetries || 0) + 1;
+      if (req.__gwRetries <= 2) {
+        console.log(`[ibkr] retry ${req.__gwRetries} after ${err.code || 'parse error'}: ${req.url}`);
+        return ibkrProxy(req, res, () => {});
+      }
+    }
     console.error('[ibkr] proxy error:', err.message);
     if (res && !res.headersSent) {
       res.statusCode = 502;
