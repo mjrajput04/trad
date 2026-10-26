@@ -124,6 +124,34 @@ const ibkrProxy = createProxyMiddleware({
   },
 });
 
+// ---- clients this gateway will not serve -------------------------------------
+// The gateway holds ONE login flow at a time. A second person's browser parked
+// on the login page, re-posting /sso/Authenticator every few seconds, competes
+// for that flow — and the owner's own two-factor response then comes back
+// "wrong", because the attempt it belonged to was replaced mid-way. Seen live
+// on 2026-10-26: one address posting /sso/Authenticator every 3 seconds while
+// the owner was trying to sign in.
+//
+// GATEWAY_BLOCK_IPS is a comma-separated list of client addresses to refuse
+// outright. It is a stop-gap for exactly that case; the real fix is giving that
+// person their own gateway.
+const BLOCKED_IPS = new Set(
+  (process.env.GATEWAY_BLOCK_IPS || '').split(',').map((s) => s.trim()).filter(Boolean),
+);
+const blockLogged = new Map();
+app.use((req, res, next) => {
+  if (BLOCKED_IPS.size === 0) return next();
+  // Read it BEFORE onProxyReq strips the forwarding headers.
+  const client = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  if (!client || !BLOCKED_IPS.has(client)) return next();
+  // One line a minute per address — enough to see it, not a flood of its own.
+  if (Date.now() - (blockLogged.get(client) ?? 0) > 60_000) {
+    blockLogged.set(client, Date.now());
+    console.log(`[ibkr] refused ${client} (GATEWAY_BLOCK_IPS)`);
+  }
+  res.status(403).type('text/plain').send('This gateway is not available from your connection.');
+});
+
 // ---- ssodh/init storm guard --------------------------------------------------
 // Every browser tab that sees a transient 401 fires `ssodh/init {compete:true}`,
 // and each one RE-INITIALIZES the brokerage session — so several tabs (or a
