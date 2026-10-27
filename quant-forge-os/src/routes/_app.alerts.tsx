@@ -77,14 +77,19 @@ function Alerts() {
     refetchInterval: 15_000,
     retry: false,
   });
-  const ownedBySym = new Map(positions.filter((p) => p.quantity > 0).map((p) => [p.symbol, p.quantity]));
-  const posBySym = new Map(positions.filter((p) => p.quantity > 0).map((p) => [p.symbol, p]));
+  // Signed: positive is long, negative is short. A short is a live position
+  // with real money at risk, so it gets a card, a live price and an exit —
+  // filtering on `> 0` used to hide it completely.
+  const ownedBySym = new Map(positions.filter((p) => p.quantity !== 0).map((p) => [p.symbol, p.quantity]));
+  const posBySym = new Map(positions.filter((p) => p.quantity !== 0).map((p) => [p.symbol, p]));
 
   // Quick-trade popup state (Buy/Sell straight from an alert card).
   const [trade, setTrade] = useState<{ symbol: string; side: "BUY" | "SELL"; defaults?: QuickTradeDefaults } | null>(null);
   const openBuy = (a: TsAlert) =>
     setTrade({ symbol: a.symbol, side: "BUY", defaults: { price: a.entry, stop: bracketStop(a) || undefined, takeProfit: a.target } });
   const openSell = (sym: string) => setTrade({ symbol: sym, side: "SELL" });
+  /** Close a short: buy back exactly what is owed (the modal fills the size). */
+  const openCover = (sym: string) => setTrade({ symbol: sym, side: "BUY" });
 
   const quoteBySym = new Map((quotesData?.quotes ?? []).map((q) => [q.symbol, q]));
   const nowPrice = (sym: string) => quoteBySym.get(sym)?.price;
@@ -109,7 +114,7 @@ function Alerts() {
   // Sorted so the query key is stable when the SAME symbols re-appear in a
   // different order on a rescan (avoids needless cold refetches).
   const displaySyms = [...new Set([
-    ...positions.filter((p) => p.quantity > 0).map((p) => p.symbol),
+    ...positions.filter((p) => p.quantity !== 0).map((p) => p.symbol),
     ...(data?.alerts ?? []).map((a) => a.symbol).filter(Boolean),
     ...(data?.bestTrade?.symbol ? [data.bestTrade.symbol] : []),
   ])].sort();
@@ -136,7 +141,7 @@ function Alerts() {
   // universe (e.g. a held ETF like CIBR): the scanner feed doesn't carry them,
   // and IBKR's pre/post snapshot goes stale — this on-demand endpoint tracks
   // Yahoo's session-aware price for any symbol.
-  const heldSyms = [...new Set(positions.filter((p) => p.quantity > 0).map((p) => p.symbol))].sort();
+  const heldSyms = [...new Set(positions.filter((p) => p.quantity !== 0).map((p) => p.symbol))].sort();
   const { data: adhocQuotes } = useQuery({
     queryKey: ["ts-adhoc-quotes", heldSyms.join(",")],
     queryFn: () => getTsSymbolQuotes(heldSyms),
@@ -172,11 +177,15 @@ function Alerts() {
     if (!pos) return undefined;
     const live = livePrice(sym);
     if (!live || live <= 0 || !(pos.entryPrice > 0)) return pos;
+    // Signed quantity makes the cash P&L come out right for a short on its own.
+    // The PERCENTAGE does not: a short gains when the price falls, so its sign
+    // has to be flipped or a winning short reads as a loss.
+    const dir = pos.quantity < 0 ? -1 : 1;
     return {
       ...pos,
       currentPrice: live,
       pnl: (live - pos.entryPrice) * pos.quantity,
-      pnlPct: ((live - pos.entryPrice) / pos.entryPrice) * 100,
+      pnlPct: ((live - pos.entryPrice) / pos.entryPrice) * 100 * dir,
     };
   };
 
@@ -191,7 +200,7 @@ function Alerts() {
       const strong = !!q && q.last > 0 && (q.changePct ?? 0) >= 0.2 && anchor > 0 && q.last >= anchor;
       return { ...e, q, strong, owned: ownedBySym.get(e.symbol) ?? 0 };
     })
-    .filter((x) => x.strong || x.owned > 0)
+    .filter((x) => x.strong || x.owned !== 0)
     .sort((a, b) => (b.q?.changePct ?? 0) - (a.q?.changePct ?? 0));
 
   const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
@@ -221,7 +230,7 @@ function Alerts() {
 
   // HOLDING override: once you actually own a symbol, its card NEVER hides —
   // not by the sliding gate, not by target/stop — until the position is sold.
-  const holding = (sym: string) => (ownedBySym.get(sym) ?? 0) > 0;
+  const holding = (sym: string) => (ownedBySym.get(sym) ?? 0) !== 0;
 
   const alerts = (data?.alerts ?? [])
     .filter(valid)
@@ -254,7 +263,7 @@ function Alerts() {
   const cardSyms = new Set([...alerts.map((a) => a.symbol), ...heldClosed.map((a) => a.symbol)]);
   const bareHoldings = positions.filter(
     (p) =>
-      p.quantity > 0 &&
+      p.quantity !== 0 &&
       p.assetClass === "STK" &&
       !cardSyms.has(p.symbol) &&
       !INVERSE_ETFS.some((e) => e.symbol === p.symbol)
@@ -305,7 +314,7 @@ function Alerts() {
               now={livePrice(bestTrade.symbol)}
               owned={ownedBySym.get(bestTrade.symbol) ?? 0}
               pos={livePos(bestTrade.symbol)}
-              onBuy={() => openBuy(bestTrade)}
+              onBuy={() => ((ownedBySym.get(bestTrade.symbol) ?? 0) < 0 ? openCover(bestTrade.symbol) : openBuy(bestTrade))}
               onSell={() => openSell(bestTrade.symbol)}
             />
           )}
@@ -347,7 +356,7 @@ function Alerts() {
                             {e.symbol}
                           </Link>
                           {active && <span className="rounded bg-bull/15 text-bull text-[9px] font-bold px-1.5 py-0.5">ACTIVE</span>}
-                          {owned > 0 && <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {owned}</span>}
+                          <PosBadge qty={owned} />
                         </div>
                         {chg != null && (
                           <span className={`text-xs num font-semibold ${chg >= 0 ? "text-bull" : "text-bear"}`}>{pct(chg)}</span>
@@ -373,22 +382,15 @@ function Alerts() {
                         <div className="text-[11px] text-muted-foreground py-2">Log in to IBKR for live levels.</div>
                       )}
 
-                      <div className="flex gap-2 mt-auto">
-                        <button
-                          onClick={() => setTrade({ symbol: e.symbol, side: "BUY", defaults: now > 0 ? { price: now, stop: +(now * 0.98).toFixed(2), takeProfit: +(now * 1.03).toFixed(2) } : undefined })}
-                          className="flex-1 h-9 rounded-lg bg-bull glow-bull text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition"
-                        >
-                          <ArrowUpRight className="h-4 w-4" /> Buy
-                        </button>
-                        {owned > 0 && (
-                          <button
-                            onClick={() => openSell(e.symbol)}
-                            className="flex-1 h-9 rounded-lg bg-bear glow-bear text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition"
-                          >
-                            <ArrowDownRight className="h-4 w-4" /> Sell {owned}
-                          </button>
-                        )}
-                      </div>
+                      <TradeButtons
+                        qty={owned}
+                        onBuy={() =>
+                          owned < 0
+                            ? openCover(e.symbol)
+                            : setTrade({ symbol: e.symbol, side: "BUY", defaults: now > 0 ? { price: now, stop: +(now * 0.98).toFixed(2), takeProfit: +(now * 1.03).toFixed(2) } : undefined })
+                        }
+                        onSell={() => openSell(e.symbol)}
+                      />
                     </div>
                   );
                 })}
@@ -417,7 +419,7 @@ function Alerts() {
                     now={livePrice(a.symbol)}
                     owned={ownedBySym.get(a.symbol) ?? 0}
                     pos={livePos(a.symbol)}
-                    onBuy={() => openBuy(a)}
+                    onBuy={() => ((ownedBySym.get(a.symbol) ?? 0) < 0 ? openCover(a.symbol) : openBuy(a))}
                     onSell={() => openSell(a.symbol)}
                   />
                 ))}
@@ -480,6 +482,7 @@ function Alerts() {
 // Card for a live position that has NO alert data — position itself is the
 // source of truth: avg cost, live price, P&L, and the Buy/Sell buttons.
 function HoldingCard({ p, now, onBuy, onSell }: {
+  /** `quantity` is signed: positive long, negative short. */
   p: { symbol: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number; pnlPct: number };
   now?: number;
   onBuy: () => void;
@@ -488,66 +491,102 @@ function HoldingCard({ p, now, onBuy, onSell }: {
   const live = now ?? p.currentPrice ?? 0;
   // Recompute P&L from the SAME live price shown as "Now" so they always agree
   // (never a stale-snapshot P&L beside a differently-stale price).
+  const short = p.quantity < 0;
+  const size = Math.abs(p.quantity);
   const consistent = live > 0 && p.entryPrice > 0;
   const pnl = consistent ? (live - p.entryPrice) * p.quantity : (p.pnl ?? 0);
-  const pnlPct = consistent ? ((live - p.entryPrice) / p.entryPrice) * 100 : (p.pnlPct ?? 0);
+  // A short gains when the price falls, so the percentage flips with it.
+  const pnlPct = consistent
+    ? ((live - p.entryPrice) / p.entryPrice) * 100 * (short ? -1 : 1)
+    : (p.pnlPct ?? 0);
   const up = pnl >= 0;
   return (
-    <div className="rounded-2xl glass p-4 flex flex-col gap-3 border border-info/25">
+    <div className={`rounded-2xl glass p-4 flex flex-col gap-3 border ${short ? "border-bear/30" : "border-info/25"}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link to="/stock/$symbol" params={{ symbol: p.symbol }} className="text-lg font-bold hover:text-primary transition" title="Open chart">
             {p.symbol}
           </Link>
-          <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {p.quantity}</span>
+          <span className={`rounded text-[9px] font-bold px-1.5 py-0.5 ${short ? "bg-bear/15 text-bear" : "bg-info/15 text-info"}`}>
+            {short ? "SHORT" : "HOLDING"} {size}
+          </span>
         </div>
         <span className={`text-xs num font-semibold ${up ? "text-bull" : "text-bear"}`}>
           {up ? "+" : ""}${fmtMoney(pnl)} ({pct(pnlPct)})
         </span>
       </div>
       <div className="flex gap-2">
-        <Level label="Avg Cost" value={p.entryPrice} tone="info" />
+        <Level label={short ? "Avg Short" : "Avg Cost"} value={p.entryPrice} tone="info" />
         <Level label="Now" value={live} tone={up ? "bull" : "bear"} />
       </div>
       <div className="text-[11px] text-muted-foreground">
-        Your live IBKR position — no active alert on this symbol right now.
+        {short
+          ? `You are short ${size} — buying ${size} back closes it.`
+          : "Your live IBKR position — no active alert on this symbol right now."}
       </div>
-      <TradeButtons owned={p.quantity} onBuy={onBuy} onSell={onSell} />
+      <TradeButtons qty={p.quantity} onBuy={onBuy} onSell={onSell} />
     </div>
   );
 }
 
-// Shared Buy / (Sell when holding) button pair for the alert cards.
-// When trading is switched off for this account the pair renders faded and
-// inert — the card still shows the setup, it just cannot be acted on.
-function TradeButtons({ owned, onBuy, onSell, tall }: { owned: number; onBuy: () => void; onSell: () => void; tall?: boolean }) {
+// The action pair under every card.
+//
+// `qty` is the SIGNED position: positive long, negative short, zero flat. The
+// close is whichever side returns the position to zero — sell for a long, buy
+// for a short — and it is labelled with the size, so the exit is one tap and
+// never a guess. With trading switched off for the account the pair renders
+// faded and inert; the card still shows the setup, it just cannot be acted on.
+function TradeButtons({ qty, onBuy, onSell, tall }: { qty: number; onBuy: () => void; onSell: () => void; tall?: boolean }) {
   const h = tall ? "h-10" : "h-9";
   const { user } = useAuth();
   const { allowed } = useTradingAllowed(user?.email);
   const off = !allowed;
   const dim = off ? "opacity-40 cursor-not-allowed grayscale" : "hover:opacity-90";
   const title = off ? TRADING_DISABLED_MESSAGE : undefined;
+  const short = qty < 0;
+  const size = Math.abs(qty);
+
+  const buyLabel = short ? `Cover ${size}` : "Buy";
+  const sellLabel = qty > 0 ? `Sell ${size}` : "Sell short";
+  // A short's exit is the BUY, so that is the one that gets the solid treatment.
+  const showSell = qty > 0 || short;
+
   return (
     <div className="flex gap-2 mt-auto">
       <button
         onClick={off ? undefined : onBuy}
         disabled={off}
-        title={title}
+        title={off ? title : short ? `Buy ${size} back to close the short` : undefined}
         className={`flex-1 ${h} rounded-lg bg-bull ${off ? "" : "glow-bull"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition ${dim}`}
       >
-        {off ? <Lock className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-4 w-4" />} Buy
+        {off ? <Lock className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-4 w-4" />} {buyLabel}
       </button>
-      {owned > 0 && (
+      {showSell && (
         <button
           onClick={off ? undefined : onSell}
           disabled={off}
-          title={title}
-          className={`flex-1 ${h} rounded-lg bg-bear ${off ? "" : "glow-bear"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition ${dim}`}
+          title={off ? title : qty > 0 ? `Sell all ${size}` : "Add to the short"}
+          className={`flex-1 ${h} rounded-lg ${short ? "hairline bg-surface-1 text-muted-foreground" : `bg-bear ${off ? "" : "glow-bear"} text-background`} text-sm font-bold inline-flex items-center justify-center gap-1.5 transition ${dim}`}
         >
-          {off ? <Lock className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-4 w-4" />} Sell {owned}
+          {off ? <Lock className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-4 w-4" />} {sellLabel}
         </button>
       )}
     </div>
+  );
+}
+
+/** Position badge for a card header. `qty` is signed; zero renders nothing. */
+function PosBadge({ qty, big }: { qty: number; big?: boolean }) {
+  if (!qty) return null;
+  const short = qty < 0;
+  const size = Math.abs(qty);
+  const cls = big
+    ? "rounded-md text-[11px] font-bold px-2 py-0.5"
+    : "rounded text-[9px] font-bold px-1.5 py-0.5";
+  return (
+    <span className={`${cls} ${short ? "bg-bear/15 text-bear" : "bg-info/15 text-info"}`}>
+      {short ? "SHORT" : "HOLDING"} {size}
+    </span>
   );
 }
 
@@ -590,7 +629,7 @@ function BestTrade({ a, now, owned, pos, onBuy, onSell }: TradeCardProps) {
               {a.symbol}
             </Link>
             <span className="rounded-md bg-primary/15 text-primary text-[11px] font-bold px-2 py-0.5">Score {Math.round(a.score)}</span>
-            {owned > 0 && <span className="rounded-md bg-info/15 text-info text-[11px] font-bold px-2 py-0.5">HOLDING {owned}</span>}
+            <PosBadge qty={owned} big />
             <span className="text-[11px] text-muted-foreground">{a.timeframe}</span>
             {now != null && <span className="text-sm num text-muted-foreground">Now {money(now)}</span>}
           </div>
@@ -618,7 +657,7 @@ function BestTrade({ a, now, owned, pos, onBuy, onSell }: TradeCardProps) {
           </div>
           <LevelBar entry={a.entry} target={a.target} stop={a.stop} now={now} />
           <YourPosition pos={pos} />
-          <TradeButtons owned={owned} onBuy={onBuy} onSell={onSell} tall />
+          <TradeButtons qty={owned} onBuy={onBuy} onSell={onSell} tall />
         </div>
       </div>
     </div>
@@ -633,7 +672,7 @@ function AlertCard({ a, now, owned, pos, onBuy, onSell }: TradeCardProps) {
           <Link to="/stock/$symbol" params={{ symbol: a.symbol }} className="text-lg font-bold hover:text-primary transition" title="Open chart">
             {a.symbol}
           </Link>
-          {owned > 0 && <span className="rounded bg-info/15 text-info text-[9px] font-bold px-1.5 py-0.5">HOLDING {owned}</span>}
+          <PosBadge qty={owned} />
           <span className="text-[10px] text-muted-foreground">{a.timeframe}</span>
         </div>
         <span className="rounded-md bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5">Score {Math.round(a.score)}</span>
@@ -669,7 +708,7 @@ function AlertCard({ a, now, owned, pos, onBuy, onSell }: TradeCardProps) {
         </div>
       )}
 
-      <TradeButtons owned={owned} onBuy={onBuy} onSell={onSell} />
+      <TradeButtons qty={owned} onBuy={onBuy} onSell={onSell} />
     </div>
   );
 }

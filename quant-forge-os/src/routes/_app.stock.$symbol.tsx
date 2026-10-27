@@ -51,9 +51,9 @@ function StockDetail() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold">{sym}</h1>
-            {owned > 0 && (
+            {owned !== 0 && (
               <span className="rounded bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5">
-                Holding {owned}
+                {owned < 0 ? `Short ${Math.abs(owned)}` : `Holding ${owned}`}
               </span>
             )}
           </div>
@@ -116,16 +116,16 @@ function StockDetail() {
                 title={tradingOff ? TRADING_DISABLED_MESSAGE : undefined}
                 className={`flex-1 h-11 rounded-lg bg-bull ${tradingOff ? "opacity-40 grayscale cursor-not-allowed" : "glow-bull hover:opacity-90"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition`}
               >
-                {tradingOff ? <Lock className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-4 w-4" />} Buy
+                {tradingOff ? <Lock className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-4 w-4" />} {owned < 0 ? `Cover ${Math.abs(owned)}` : "Buy"}
               </button>
-              {owned > 0 && (
+              {owned !== 0 && (
                 <button
                   onClick={tradingOff ? undefined : () => setTrade({ side: "SELL" })}
                   disabled={tradingOff}
                   title={tradingOff ? TRADING_DISABLED_MESSAGE : undefined}
                   className={`flex-1 h-11 rounded-lg bg-bear ${tradingOff ? "opacity-40 grayscale cursor-not-allowed" : "glow-bear hover:opacity-90"} text-background text-sm font-bold inline-flex items-center justify-center gap-1.5 transition`}
                 >
-                  {tradingOff ? <Lock className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-4 w-4" />} Sell {owned}
+                  {tradingOff ? <Lock className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-4 w-4" />} {owned > 0 ? `Sell ${owned}` : "Sell short"}
                 </button>
               )}
             </div>

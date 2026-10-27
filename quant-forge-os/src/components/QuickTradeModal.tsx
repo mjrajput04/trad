@@ -18,7 +18,8 @@ export interface QuickTradeDefaults {
 interface Props {
   symbol: string;
   side: "BUY" | "SELL";
-  /** Shares currently held — pre-fills the SELL quantity. */
+  /** The position in this symbol, SIGNED: positive is long, negative is short.
+   *  A long pre-fills the SELL quantity; a short pre-fills the BUY that covers it. */
   ownedQty?: number;
   defaults?: QuickTradeDefaults;
   onClose: () => void;
@@ -40,6 +41,12 @@ function inExtendedHours(): boolean {
 }
 
 export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defaults, onClose }: Props) {
+  // A short is a negative position. The size that closes it is its magnitude,
+  // and the side that closes it is the opposite one.
+  const longQty = ownedQty > 0 ? ownedQty : 0;
+  const shortQty = ownedQty < 0 ? -ownedQty : 0;
+  const closingSide: "BUY" | "SELL" | null = longQty > 0 ? "SELL" : shortQty > 0 ? "BUY" : null;
+  const closingQty = longQty > 0 ? longQty : shortQty;
   const qc = useQueryClient();
   const { isPaper, currentAccount } = useTrading();
   const [afterHours, setAfterHours] = useState<boolean>(() => inExtendedHours());
@@ -78,7 +85,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
   useEffect(() => {
     const ref = defaults?.price || now;
     if (qty === 0) {
-      if (side === "SELL" && ownedQty > 0) setQty(ownedQty);
+      if (closingSide && side === closingSide && closingQty > 0) setQty(closingQty);
       else if (side === "BUY" && ref > 0) {
         const stopRef = defaults?.stop ?? 0;
         const perShareRisk = stopRef > 0 ? ref - stopRef : ref * 0.02;
@@ -96,7 +103,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
       setTrailPct(Number((((ref - defaults.stop) / ref) * 100).toFixed(2)));
     }
     if (price === 0 && ref > 0) setPrice(Number(ref.toFixed(2)));
-  }, [now, summary, side, ownedQty, defaults, qty, trailPct, price]);
+  }, [now, summary, side, ownedQty, closingSide, closingQty, defaults, qty, trailPct, price]);
 
   const order = useMutation({
     mutationFn: async () => {
@@ -106,7 +113,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
       if (slMode === "fixed" && (!fixedStop || fixedStop <= 0)) throw new Error("Enter a stop price");
       // Selling out of a position? First cancel its leftover bracket orders
       // (GTC stop/target) — otherwise they fire later and flip you short.
-      if (side === "SELL" && ownedQty > 0) {
+      if (closingSide && side === closingSide && closingQty > 0) {
         await cancelWorkingOrders({ symbol }).catch(() => {});
       }
       if (afterHours && type !== "LMT") throw new Error("After-hours ma LIMIT order j chale — LMT select karo");
@@ -171,12 +178,13 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
         </div>
         <p className="text-[11px] text-muted-foreground mb-3">
           IBKR {isPaper ? "paper" : "live"} account <span className="num">{currentAccount}</span>
-          {ownedQty > 0 && <> · you hold <span className="num font-semibold">{ownedQty}</span> shares</>}
+          {longQty > 0 && <> · you hold <span className="num font-semibold">{longQty}</span> shares</>}
+          {shortQty > 0 && <> · you are short <span className="num font-semibold">{shortQty}</span> shares</>}
         </p>
 
         <div className="grid grid-cols-2 gap-2 mb-3">
-          <button onClick={() => { setSide("BUY"); }} className={`h-9 rounded-lg text-sm font-bold transition ${side === "BUY" ? "bg-bull text-background glow-bull" : "hairline bg-surface-1 text-muted-foreground"}`}>BUY</button>
-          <button onClick={() => { setSide("SELL"); if (ownedQty > 0) setQty(ownedQty); }} className={`h-9 rounded-lg text-sm font-bold transition ${side === "SELL" ? "bg-bear text-background glow-bear" : "hairline bg-surface-1 text-muted-foreground"}`}>SELL</button>
+          <button onClick={() => { setSide("BUY"); if (closingSide === "BUY") setQty(closingQty); }} className={`h-9 rounded-lg text-sm font-bold transition ${side === "BUY" ? "bg-bull text-background glow-bull" : "hairline bg-surface-1 text-muted-foreground"}`}>BUY</button>
+          <button onClick={() => { setSide("SELL"); if (closingSide === "SELL") setQty(closingQty); }} className={`h-9 rounded-lg text-sm font-bold transition ${side === "SELL" ? "bg-bear text-background glow-bear" : "hairline bg-surface-1 text-muted-foreground"}`}>SELL</button>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-3">
@@ -272,14 +280,14 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
           )}
         </div>
 
-        {side === "SELL" && ownedQty === 0 && (
+        {side === "SELL" && longQty === 0 && shortQty === 0 && (
           <div className="mb-3 rounded-lg bg-warn/10 border border-warn/20 px-3 py-2 text-[11px] text-warn flex items-center gap-2">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> You don't hold {symbol} — selling would open a SHORT position.
           </div>
         )}
-        {side === "SELL" && ownedQty > 0 && qty > ownedQty && (
+        {side === "SELL" && longQty > 0 && qty > longQty && (
           <div className="mb-3 rounded-lg bg-warn/10 border border-warn/20 px-3 py-2 text-[11px] text-warn flex items-center gap-2">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Selling more than the {ownedQty} you hold shorts the difference.
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Selling more than the {longQty} you hold shorts the difference.
           </div>
         )}
         {!isPaper && (
