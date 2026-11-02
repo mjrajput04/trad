@@ -7,11 +7,18 @@ import { fmtMoney } from "@/lib/market-data";
 export function Ticker() {
   const navigate = useNavigate();
 
+  // 6s. This asks the gateway for the WHOLE universe (~48 contracts) and it
+  // runs on every page, so at 3s it was the single heaviest caller — and the
+  // gateway stalls when too many snapshot requests overlap, which showed up as
+  // the PRICES ON THE CARDS freezing. Nobody reads an exact number off a
+  // scrolling marquee; the cards and the trade popup stay fast.
   const { data: quotes = [] } = useQuery({
     queryKey: ["ticker-quotes"],
     queryFn: () => getQuotes(UNIVERSE_SYMBOLS),
-    refetchInterval: 3_000,
-    staleTime: 1_500,
+    refetchInterval: 6_000,
+    staleTime: 3_000,
+    retry: 1,
+    retryDelay: 500,
   });
 
   const tickerData = quotes

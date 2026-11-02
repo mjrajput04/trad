@@ -59,11 +59,17 @@ function Alerts() {
     queryFn: getTsAlerts,
     refetchInterval: 20_000,
   });
+  // 2s, not 1s: the call itself takes 0.4-1.3s from a browser in India, so a
+  // 1s timer only queued a second request behind the first. During regular
+  // hours the prices on screen come from IBKR anyway (see livePrice) — this
+  // feed is here for the indices and for telling pre/post from regular.
   const { data: quotesData } = useQuery({
     queryKey: ["ts-quotes"],
     queryFn: getTsQuotes,
-    refetchInterval: 1_000, // live prices tick every second (matches the engine)
+    refetchInterval: 2_000,
   });
+  const feedSession = quotesData?.quotes?.find((q) => q.session)?.session;
+  const extendedHours = feedSession === "PRE" || feedSession === "POST";
   const { data: backtest } = useQuery({
     queryKey: ["ts-backtest"],
     queryFn: getTsBacktest,
@@ -94,37 +100,41 @@ function Alerts() {
   const quoteBySym = new Map((quotesData?.quotes ?? []).map((q) => [q.symbol, q]));
   const nowPrice = (sym: string) => quoteBySym.get(sym)?.price;
 
-  // Inverse-ETF quotes come from IBKR (the TradeScope feed doesn't carry them).
-  const { data: etfQuotes = [] } = useQuery({
-    queryKey: ["inverse-etf-quotes"],
-    queryFn: () => getQuotes(INVERSE_ETFS.map((e) => e.symbol)),
-    refetchInterval: 5_000,
-    retry: false,
-  });
-  const etfBySym = new Map(etfQuotes.map((q) => [q.symbol, q]));
-
   // Real-time IBKR prices for EVERY symbol we render — held positions, every
-  // alert, and the best trade. The free TradeScope/Yahoo feed periodically
+  // alert, the best trade, and the inverse ETFs. The free TradeScope/Yahoo feed periodically
   // FREEZES mid-session (all symbols stall for 20-30 min) which leaves every
   // card stuck on an old price; even when fresh it lags a few minutes and its
   // P&L is a separate cached snapshot (a held card once showed "Now 171.63"
   // beside "-$303" while the stock was really 174+). IBKR's snapshot is the
   // real, tradeable price and stays live through Yahoo outages — so we pull it
   // for the whole page and recompute held P&L from the SAME number.
-  // Sorted so the query key is stable when the SAME symbols re-appear in a
-  // different order on a rescan (avoids needless cold refetches).
+  // The inverse ETFs ride along in this SAME call. They used to have a poll of
+  // their own, so the gateway got two overlapping snapshot requests every few
+  // seconds for one page; one connection per request (keep-alive to the gateway
+  // is off on purpose) is exactly what makes it stall.
   const displaySyms = [...new Set([
     ...positions.filter((p) => p.quantity !== 0).map((p) => p.symbol),
     ...(data?.alerts ?? []).map((a) => a.symbol).filter(Boolean),
     ...(data?.bestTrade?.symbol ? [data.bestTrade.symbol] : []),
+    ...INVERSE_ETFS.map((e) => e.symbol),
   ])].sort();
+  // The key no longer carries the symbol list. It changed on every 20s rescan,
+  // and a new key is a BRAND-NEW query to React Query: no data while it loads,
+  // and the 3s timer restarting from zero. The symbols travel in a ref instead,
+  // so the poll keeps its cadence and its last result while the list churns.
+  const symsRef = useRef<string[]>([]);
+  symsRef.current = displaySyms;
   const { data: ibkrQuotes = [] } = useQuery({
-    queryKey: ["ibkr-live-quotes", displaySyms.join(",")],
-    queryFn: () => getQuotes(displaySyms),
+    queryKey: ["ibkr-live-quotes"],
+    queryFn: () => getQuotes(symsRef.current),
     enabled: displaySyms.length > 0,
     refetchInterval: 3_000,
-    retry: false,
+    // One quick retry. `false` meant a single dropped poll left the card on its
+    // old price for the full interval, which is what "it is not updating" was.
+    retry: 1,
+    retryDelay: 400,
   });
+  const etfBySym = new Map(ibkrQuotes.map((q) => [q.symbol, q]));
   // Persistent last-known IBKR price per symbol. The brokerage session flaps
   // (snapshot 500s for a beat) and the query key changes every ~20s as alerts
   // rescan — either one blanks ibkrQuotes momentarily, and WITHOUT persistence
@@ -141,11 +151,15 @@ function Alerts() {
   // universe (e.g. a held ETF like CIBR): the scanner feed doesn't carry them,
   // and IBKR's pre/post snapshot goes stale — this on-demand endpoint tracks
   // Yahoo's session-aware price for any symbol.
+  // Only while the market is actually in pre/post. During regular hours IBKR's
+  // last trade IS the truth and every held symbol is already in the snapshot
+  // call above, so this was a third poll fetching a price nothing would use.
+  // If the feed is down we cannot tell the session, so keep it on as a fallback.
   const heldSyms = [...new Set(positions.filter((p) => p.quantity !== 0).map((p) => p.symbol))].sort();
   const { data: adhocQuotes } = useQuery({
     queryKey: ["ts-adhoc-quotes", heldSyms.join(",")],
     queryFn: () => getTsSymbolQuotes(heldSyms),
-    enabled: heldSyms.length > 0,
+    enabled: heldSyms.length > 0 && (extendedHours || !feedSession),
     refetchInterval: 5_000,
     retry: false,
   });

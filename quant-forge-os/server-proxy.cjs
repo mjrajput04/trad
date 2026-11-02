@@ -210,6 +210,126 @@ app.use((req, res, next) => {
   return next();
 });
 
+// ---- market-data fan-in ------------------------------------------------------
+// Every open tab polls the same contracts several times a second — the ticker
+// asks for the whole universe every 3s, the alerts page for its own symbols
+// every 3s, the trade popup every 3s — and keep-alive to the gateway is off on
+// purpose (see gatewayAgent), so each poll opened a CONNECTION OF ITS OWN.
+//
+// The gateway is a single Java process. Measured from outside on 2026-11-02,
+// with the app open, successive snapshot calls took 1s → 2s → 7s → 14s and then
+// stopped answering altogether (3 of 14 never replied). That is what "the price
+// is not updating" looks like from the browser: the request is still open.
+//
+// So identical reads now share ONE gateway call. A request that arrives while
+// the same URL is already in flight waits for that answer instead of opening
+// its own connection, and the result is reused for a short TTL afterwards — a
+// quote cannot be fresher than the round trip out to the browser anyway.
+//
+// Scope is deliberately tiny: read-only market data and contract lookups. Each
+// caller's cookie is part of the key, so nothing is ever shared across logins.
+// Orders, positions, auth and anything with a body go straight to the gateway
+// as before, and ANY error, timeout or non-200 falls through to the normal
+// proxy path — this can only ever save work, never change an answer.
+const SNAPSHOT_TTL_MS = Number(process.env.MD_CACHE_MS || 900);
+const CONID_TTL_MS = 10 * 60_000; // a contract id for a symbol does not move
+const GW_TIMEOUT_MS = Number(process.env.GW_TIMEOUT_MS || 8_000);
+
+function sharedTtl(req) {
+  if (req.method !== 'GET') return 0;
+  const p = req.path || '';
+  if (p === '/v1/api/iserver/marketdata/snapshot') return SNAPSHOT_TTL_MS;
+  if (p === '/v1/api/trsrv/stocks') return CONID_TTL_MS;
+  return 0;
+}
+
+const mdCache = new Map(); // key -> { at, status, type, body }
+const mdInflight = new Map(); // key -> Promise
+
+function gatewayGet(url, headers) {
+  return new Promise((resolve, reject) => {
+    const r = http.request(
+      {
+        host: '127.0.0.1',
+        port: GATEWAY_PORT,
+        path: url,
+        method: 'GET',
+        agent: gatewayAgent,
+        headers: {
+          accept: headers.accept || 'application/json',
+          'user-agent': headers['user-agent'] || 'Mozilla/5.0',
+          ...(headers.cookie ? { cookie: headers.cookie } : {}),
+        },
+      },
+      (gr) => {
+        const chunks = [];
+        gr.on('data', (c) => chunks.push(c));
+        gr.on('end', () =>
+          resolve({
+            status: gr.statusCode,
+            type: gr.headers['content-type'] || 'application/json',
+            body: Buffer.concat(chunks),
+          }));
+      },
+    );
+    // Without this a stuck request holds its connection until the gateway feels
+    // like closing it, which is exactly how the pile-up above builds.
+    r.setTimeout(GW_TIMEOUT_MS, () => r.destroy(new Error('gateway timeout')));
+    r.on('error', reject);
+    r.end();
+  });
+}
+
+function sendShared(req, res, hit, how) {
+  const origin = req.headers.origin;
+  if (isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Content-Type', hit.type);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Nova-Shared', how); // visible in devtools when checking this
+  res.status(hit.status).send(hit.body);
+}
+
+app.use((req, res, next) => {
+  const ttl = sharedTtl(req);
+  if (!ttl) return next();
+
+  // Keyed by caller: two different logins never read each other's answer.
+  const who = req.headers.cookie ? String(req.headers.cookie).length + ':' + String(req.headers.cookie).slice(-24) : 'none';
+  const key = `${who}|${req.originalUrl}`;
+  const hit = mdCache.get(key);
+  if (hit && Date.now() - hit.at < ttl) return sendShared(req, res, hit, 'hit');
+
+  let p = mdInflight.get(key);
+  if (!p) {
+    p = gatewayGet(req.originalUrl, req.headers).finally(() => mdInflight.delete(key));
+    mdInflight.set(key, p);
+  }
+  p.then(
+    (out) => {
+      if (res.headersSent) return;
+      if (out.status === 200) {
+        if (mdCache.size > 400) mdCache.clear(); // bounded; it refills in a second
+        mdCache.set(key, { at: Date.now(), ...out });
+        return sendShared(req, res, { ...out, at: Date.now() }, 'miss');
+      }
+      // The gateway said something other than OK (a session flap, usually).
+      // A seconds-old quote beats an error on screen; otherwise let the real
+      // proxy try, so the caller still sees the gateway's own answer.
+      if (hit && Date.now() - hit.at < ttl * 20) return sendShared(req, res, hit, 'stale');
+      return next();
+    },
+    () => {
+      if (res.headersSent) return;
+      if (hit) return sendShared(req, res, hit, 'stale-error');
+      return next();
+    },
+  );
+});
+
 // Everything else (login UI at /, /v1/api, /sso, static assets, websockets) -> gateway
 app.use('/', ibkrProxy);
 
