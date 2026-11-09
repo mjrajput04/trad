@@ -52,33 +52,59 @@ function computeRealized(trades: Trade[]) {
 
   for (const [symbol, fills] of bySym) {
     fills.sort((a, b) => a.time - b.time);
-    // Signed lots: +qty = long inventory, -qty = short inventory.
-    const lots: { qty: number; price: number }[] = [];
+    // Realized against the position's AVERAGE cost — the way IBKR reports it.
+    //
+    // This used to match fills first-in-first-out. Over a whole round trip FIFO
+    // and average cost come to the SAME total, but they split it across days
+    // very differently, and this page is read next to the broker. QCOM, Nov
+    // 2026: six buys from 164.43 to 177.52, then IBKR force-sold 81 shares on
+    // the 4th and the rest went out at 172 on the 9th.
+    //
+    //            FIFO (what this page said)   average cost (what IBKR says)
+    //   Nov 4            -549.02                        +18.13
+    //   Nov 9          +1,339.89                       +772.73
+    //   total            +790.86                       +790.87
+    //
+    // FIFO paired the forced sale with the oldest, dearest lots, booked the
+    // loss on the 4th, and left today reading +1,339 beside a broker screen
+    // saying +780. Same money, wrong day — so follow the broker.
+    //
+    // qty is signed: + long, - short. avg is the cost of whatever is open.
+    let qty = 0;
+    let avg = 0;
     const s: SymbolPnl = { symbol, realized: 0, qtyClosed: 0, trips: 0, wins: 0, losses: 0 };
 
     for (const f of fills) {
       const dir = f.side === "BUY" ? 1 : -1;
-      let remaining = f.quantity;
+      const n = f.quantity;
       let fillPnl = 0;
-      let matchedAny = false;
+      let closed = 0;
 
-      while (remaining > 0 && lots.length > 0 && Math.sign(lots[0].qty) === -dir) {
-        const lot = lots[0];
-        const matched = Math.min(remaining, Math.abs(lot.qty));
-        // Long lot closed by a sell: (sell - buy) · qty. Short lot covered by a
-        // buy: (sell - buy) · qty with the lot as the sell. Same formula, swapped.
-        const pnl = lot.qty > 0 ? (f.price - lot.price) * matched : (lot.price - f.price) * matched;
-        fillPnl += pnl;
-        s.realized += pnl;
-        s.qtyClosed += matched;
-        matchedAny = true;
-        lot.qty -= matched * Math.sign(lot.qty);
-        if (lot.qty === 0) lots.shift();
-        remaining -= matched;
+      if (qty !== 0 && Math.sign(qty) !== dir) {
+        closed = Math.min(n, Math.abs(qty));
+        // A long closed by a sell earns (sell - avg); a short covered by a buy
+        // earns (avg - buy). The sign of the position does both at once.
+        fillPnl = (f.price - avg) * closed * Math.sign(qty);
+        s.realized += fillPnl;
+        s.qtyClosed += closed;
       }
-      if (remaining > 0) lots.push({ qty: dir * remaining, price: f.price });
 
-      if (matchedAny) {
+      const held = Math.abs(qty);
+      const opening = n - closed; // the part of this fill that closes nothing
+      qty += dir * n;
+
+      if (closed === 0) {
+        // Adding to the position (or starting one): blend this fill in.
+        avg = held + n > 0 ? (avg * held + f.price * n) / (held + n) : f.price;
+      } else if (opening > 0) {
+        // The position flipped; what is left over is a new one at this price.
+        avg = f.price;
+      } else if (qty === 0) {
+        avg = 0;
+      }
+      // A partial close leaves `avg` alone — that is the whole point.
+
+      if (closed > 0) {
         s.trips += 1;
         if (fillPnl >= 0) { s.wins += 1; wins += 1; } else { s.losses += 1; losses += 1; }
         const k = dayKey(f.time);

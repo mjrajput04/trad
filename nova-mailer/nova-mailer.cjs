@@ -84,8 +84,15 @@ async function allUserEmails() {
   }
 }
 
-// ---- FIFO realized P&L (same algorithm as the Analysis page) ----
-function fifoRealized(trades) {
+// ---- realized P&L, average cost (same algorithm as the Analysis page) ----
+//
+// This matched fills first-in-first-out until Nov 2026. FIFO and average cost
+// reach the same TOTAL over a round trip but split it across days differently,
+// and the daily statement is read beside the IBKR account, which reports
+// average cost. QCOM: the forced sale of 81 shares on Nov 4 paired under FIFO
+// with the oldest, dearest lots, so the statement showed -549 that day and
+// +1,340 on the 9th where the broker said +18 and +780. Follow the broker.
+function realizedPnl(trades) {
   const bySym = new Map();
   for (const t of trades) {
     if (!t.symbol || !t.quantity || !t.price) continue;
@@ -96,22 +103,34 @@ function fifoRealized(trades) {
   const perSym = new Map();   // symbol -> pnl (of closed qty)
   for (const [symbol, fills] of bySym) {
     fills.sort((a, b) => a.time - b.time);
-    const lots = [];
+    let qty = 0; // signed: + long, - short
+    let avg = 0; // cost of whatever is open
     for (const f of fills) {
       const dir = f.side === "BUY" ? 1 : -1;
-      let remaining = f.quantity;
-      let fillPnl = 0, matched = false;
-      while (remaining > 0 && lots.length && Math.sign(lots[0].qty) === -dir) {
-        const lot = lots[0];
-        const m = Math.min(remaining, Math.abs(lot.qty));
-        fillPnl += lot.qty > 0 ? (f.price - lot.price) * m : (lot.price - f.price) * m;
-        lot.qty -= m * Math.sign(lot.qty);
-        if (lot.qty === 0) lots.shift();
-        remaining -= m;
-        matched = true;
+      const n = f.quantity;
+      let fillPnl = 0, closed = 0;
+
+      if (qty !== 0 && Math.sign(qty) !== dir) {
+        closed = Math.min(n, Math.abs(qty));
+        // Long closed by a sell: (sell - avg). Short covered by a buy:
+        // (avg - buy). The sign of the position does both at once.
+        fillPnl = (f.price - avg) * closed * Math.sign(qty);
       }
-      if (remaining > 0) lots.push({ qty: dir * remaining, price: f.price });
-      if (matched) {
+
+      const held = Math.abs(qty);
+      const opening = n - closed;
+      qty += dir * n;
+
+      if (closed === 0) {
+        avg = held + n > 0 ? (avg * held + f.price * n) / (held + n) : f.price;
+      } else if (opening > 0) {
+        avg = f.price; // position flipped — the leftover is a new one
+      } else if (qty === 0) {
+        avg = 0;
+      }
+      // A partial close leaves `avg` alone, which is the whole point.
+
+      if (closed > 0) {
         const k = etParts(new Date(f.time)).key;
         perDay.set(k, (perDay.get(k) ?? 0) + fillPnl);
         perSym.set(symbol, (perSym.get(symbol) ?? 0) + fillPnl);
@@ -258,7 +277,7 @@ async function pollAlerts() {
 async function buildDailySummary(dayKeyEt) {
   const all = await archiveAll();
   const dayTrades = all.filter((t) => etParts(new Date(t.time)).key === dayKeyEt).sort((a, b) => a.time - b.time);
-  const { perDay, perSym } = fifoRealized(all);
+  const { perDay, perSym } = realizedPnl(all);
   const realized = perDay.get(dayKeyEt) ?? 0;
   const commissions = dayTrades.reduce((a, t) => a + Math.abs(t.commission || 0), 0);
   const gross = dayTrades.reduce((a, t) => a + Math.abs(t.netAmount || t.price * t.quantity), 0);
@@ -326,7 +345,7 @@ async function maybeDaily(now) {
 async function sendMonthly(monthKey, to) {
   const all = await archiveAll();
   const monthTrades = all.filter((t) => etParts(new Date(t.time)).key.startsWith(monthKey));
-  const { perDay, perSym } = fifoRealized(all);
+  const { perDay, perSym } = realizedPnl(all);
   const realized = [...perDay.entries()].filter(([k]) => k.startsWith(monthKey)).reduce((a, [, v]) => a + v, 0);
   const commissions = monthTrades.reduce((a, t) => a + Math.abs(t.commission || 0), 0);
   const symRows = [...perSym.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([s, p]) => `
