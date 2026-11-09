@@ -172,6 +172,26 @@ app.use((req, res, next) => {
   res.status(403).type('text/plain').send('This gateway is not available from your connection.');
 });
 
+// ---- "someone is logging in right now" ---------------------------------------
+// The keepalive below revives a dead brokerage session with
+// `ssodh/init {compete:true}`, and compete means TAKE THE SESSION from whoever
+// holds it. That is right when the holder is a stale server-side session. It is
+// exactly wrong while a person is standing at backend.nassphx.com waiting on
+// their phone, because the half-built session it takes is THEIRS.
+//
+// Seen live 2026-11-09: the SSO had been dead since the 4th, the keepalive ran
+// init every 60s, and every login attempt was killed inside the minute — the
+// 2FA was approved, the page bounced back to the password form, and the bridge
+// never came up. These paths are the gateway's own login flow; a hit on one
+// from a browser means hands are on it, so the keepalive stands down.
+const LOGIN_PATHS = /\/sso\/(Login|Authenticator|Dispatcher|Validate)\b/i;
+const LOGIN_GRACE_MS = 3 * 60_000;
+let lastHumanLoginAt = 0;
+app.use((req, res, next) => {
+  if (req.headers['x-forwarded-for'] && LOGIN_PATHS.test(req.path)) lastHumanLoginAt = Date.now();
+  next();
+});
+
 // ---- ssodh/init storm guard --------------------------------------------------
 // Every browser tab that sees a transient 401 fires `ssodh/init {compete:true}`,
 // and each one RE-INITIALIZES the brokerage session — so several tabs (or a
@@ -187,7 +207,11 @@ app.use((req, res, next) => {
   if (req.method !== 'POST' || !INIT_PATH.test(req.path)) return next();
   const fromBrowser = !!req.headers['x-forwarded-for'];
   const since = Date.now() - lastInitAt;
-  if (fromBrowser && since < INIT_MIN_GAP_MS) {
+  // Right after a sign-in the init is the one that BUILDS the bridge, so it
+  // must go through even if the keepalive used up this minute's slot. Only the
+  // idle-tab storm this guard was written for gets replayed a synthetic answer.
+  const justLoggedIn = Date.now() - lastHumanLoginAt < LOGIN_GRACE_MS;
+  if (fromBrowser && !justLoggedIn && since < INIT_MIN_GAP_MS) {
     console.log(`[ibkr] ssodh/init throttled (${Math.round(since / 1000)}s since last)`);
     const origin = req.headers.origin;
     if (isAllowedOrigin(origin)) {
@@ -357,6 +381,7 @@ async function gw(path, body) {
 }
 
 let keepaliveBusy = false;
+let lastDeadSsoLog = 0;
 async function establishBridge(reason) {
   console.log(`[keepalive] ${reason} — re-establishing brokerage bridge`);
   await gw('/iserver/reauthenticate').catch(() => {});
@@ -379,6 +404,27 @@ async function keepalive() {
     // the instant it's down.
     const st = await gw('/iserver/auth/status').catch(() => null);
     const s = st && st.json;
+
+    // Hands on the login page — do not compete for the session they are
+    // building. Tickle only; the next cycle picks it up once they are through.
+    const sinceLogin = Date.now() - lastHumanLoginAt;
+    if (sinceLogin < LOGIN_GRACE_MS) {
+      console.log(`[keepalive] login in progress (${Math.round(sinceLogin / 1000)}s ago) — not competing`);
+      return;
+    }
+
+    // The gateway says this SSO is no longer a valid login. No amount of
+    // re-init fixes that — only a human signing in again does — and each
+    // attempt to force it destroys the session a person may be mid-way
+    // through building. So: stop, and say so once every ten minutes.
+    if (s && typeof s.fail === 'string' && /invalid_username_or_password/i.test(s.fail)) {
+      if (Date.now() - lastDeadSsoLog > 10 * 60_000) {
+        lastDeadSsoLog = Date.now();
+        console.log('[keepalive] SSO rejected by the broker — a human must sign in at backend.nassphx.com');
+      }
+      return;
+    }
+
     if (s && !s.authenticated) {
       // SSO alive (tickle ok) but brokerage session not authenticated — covers
       // BOTH connected:false and connected:true (the old code only handled the
