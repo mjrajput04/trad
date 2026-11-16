@@ -425,12 +425,21 @@ async function keepalive() {
       return;
     }
 
-    if (s && !s.authenticated) {
+    // No body at all. The gateway answers 401 with zero bytes while it holds no
+    // session, so `s` is null — and the old code then did nothing, every cycle,
+    // for ever. Seen on 2026-11-16: the broker refused the gateway's own
+    // sso/validate after an otherwise clean sign-in, the gateway retried,
+    // logged "giving up", and from then on nobody was asking again. Whatever
+    // the broker's reason, it is usually temporary, so keep offering — slowly,
+    // once a minute is the cycle anyway — instead of waiting for a human.
+    if (!s) {
+      await establishBridge('gateway holds no session (empty 401)');
+    } else if (!s.authenticated) {
       // SSO alive (tickle ok) but brokerage session not authenticated — covers
       // BOTH connected:false and connected:true (the old code only handled the
       // connected:true case, so a full drop stayed dead until manual revival).
       await establishBridge(`session down (auth=${s.authenticated} conn=${s.connected})`);
-    } else if (s && s.authenticated) {
+    } else if (s.authenticated) {
       // Authenticated, but a FRESH login can leave the bridge uninitialized
       // ("no bridge" 400s on /accounts) until someone runs ssodh/init.
       const acc = await fetch(`${GW}/iserver/accounts`).then((r) => r.status).catch(() => 0);
