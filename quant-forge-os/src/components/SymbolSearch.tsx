@@ -7,6 +7,7 @@ import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 import { fmtMoney } from "@/lib/market-data";
 import { Delta } from "./Delta";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -37,7 +38,7 @@ export function SymbolSearch() {
   // Live IBKR search for anything not in the local universe
   const debouncedQuery = useDebounced(query.trim(), 400);
   const { data: remoteMatches = [], isFetching: searching } = useQuery({
-    queryKey: ["ibkr-symbol-search", debouncedQuery],
+    queryKey: [activeBroker(), "ibkr-symbol-search", debouncedQuery],
     queryFn: () => searchSymbols(debouncedQuery),
     enabled: isOpen && debouncedQuery.length >= 2,
     staleTime: 60_000,
@@ -55,7 +56,7 @@ export function SymbolSearch() {
   // Live quotes for the first visible rows
   const quoteSymbols = merged.slice(0, 20).map((s) => s.symbol);
   const { data: quotes = [] } = useQuery({
-    queryKey: ["search-quotes", quoteSymbols.join(",")],
+    queryKey: [activeBroker(), "search-quotes", quoteSymbols.join(",")],
     queryFn: () => getQuotes(quoteSymbols),
     enabled: quoteSymbols.length > 0 && isOpen,
     refetchInterval: 5_000,

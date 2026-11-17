@@ -77,7 +77,7 @@ function Broker() {
   // Live price for the selected symbol — shown next to the ticket and used to
   // auto-fill sensible levels when you pick a new stock.
   const { data: liveQuote } = useQuery({
-    queryKey: ["order-quote", symbol],
+    queryKey: [activeBroker(), "order-quote", symbol],
     queryFn: () => getQuotes([symbol]),
     enabled: symbol.trim().length > 0,
     refetchInterval: 3_000,
@@ -117,13 +117,13 @@ function Broker() {
   };
 
   const { data: auth } = useQuery({
-    queryKey: ["ibkr-auth"],
+    queryKey: [activeBroker(), "ibkr-auth"],
     queryFn: getAuthStatus,
     refetchInterval: 30_000,
   });
 
   const { data: summary, isLoading } = useQuery({
-    queryKey: ["ibkr-summary"],
+    queryKey: [activeBroker(), "ibkr-summary"],
     queryFn: getAccountSummary,
     refetchInterval: 10_000,
   });
@@ -166,9 +166,9 @@ function Broker() {
         if (st) toast.success(`✅ ${symbol} order ${brokerInfo().short} par LIVE che (${st})`, { duration: 8000 });
         else toast.error(`⚠️ ${symbol} order ${brokerInfo().short} order book ma NATHI dekhato — Orders page check karo, jarur pade FARI muko!`, { duration: 20000 });
       });
-      qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-orders"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-positions"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-summary"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Order failed"),
   });
@@ -206,8 +206,10 @@ function Broker() {
               <Plug className="h-5 w-5 text-background" />
             </div>
             <div>
-              <div className="text-sm font-semibold">Interactive Brokers</div>
-              <div className="text-[11px] text-muted-foreground">{currentAccount} · {isPaper ? "Paper" : "Live"} · Client Portal</div>
+              <div className="text-sm font-semibold">{brokerInfo().name}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {currentAccount} · {isPaper ? "Paper" : "Live"} · {activeBroker() === "etrade" ? "OAuth" : "Client Portal"}
+              </div>
             </div>
             <div className={`ml-auto flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium ${connected ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>
               <LiveDot /> {connected ? "Connected" : "Disconnected"}

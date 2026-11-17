@@ -4,13 +4,23 @@
 // and Analysis then read the full archive instead of just the last week.
 
 import { supabase } from "@/integrations/supabase/client";
+import { activeBroker } from "./broker";
 import { getTrades, getOrders, type Trade } from "./api/broker";
 
 // The generated Database types predate this table — keep the cast contained here.
 // Each deployed instance archives into its own table (VITE_TRADES_TABLE), so a
 // second client's executions never mix with the owner's.
-const TRADES_TABLE: string = import.meta.env.VITE_TRADES_TABLE || "ibkr_trades";
-const tradesTable = () => (supabase as any).from(TRADES_TABLE);
+// One table per broker. These are different accounts at different firms, so a
+// shared archive would mix two sets of executions into one P&L and one history
+// — and the IBKR rows carry IBKR execution ids, which would collide on nothing
+// and merge on nothing. Each deployed instance can still override its own
+// table name (a second client archives into ibkr_trades_c1, for example).
+const TRADES_TABLE = (): string =>
+  activeBroker() === "etrade"
+    ? import.meta.env.VITE_ETRADE_TRADES_TABLE || "etrade_trades"
+    : import.meta.env.VITE_TRADES_TABLE || "ibkr_trades";
+
+const tradesTable = () => (supabase as any).from(TRADES_TABLE());
 
 /** Archive IBKR executions (idempotent — duplicates are ignored). */
 export async function syncTrades(trades: Trade[]): Promise<number> {

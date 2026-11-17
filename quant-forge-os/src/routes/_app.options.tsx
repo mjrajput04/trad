@@ -10,6 +10,7 @@ import { SymbolPicker } from "@/components/SymbolPicker";
 import { OptionTradeModal, fmtExpiry } from "@/components/OptionTradeModal";
 import { fmtMoney } from "@/lib/market-data";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/options")({
   head: () => ({ meta: [{ title: "F&O Options · NOVA" }, { name: "description", content: `Live ${brokerInfo().short} option chain with one-tap trading.` }] }),
@@ -26,7 +27,7 @@ function OptionsPage() {
 
   // Underlying conid + option months
   const { data: meta, isLoading: metaLoading, isError: metaError } = useQuery({
-    queryKey: ["opt-meta", symbol],
+    queryKey: [activeBroker(), "opt-meta", symbol],
     queryFn: () => getOptionMeta(symbol),
     enabled: symbol.trim().length > 0,
     staleTime: 10 * 60_000,
@@ -36,7 +37,7 @@ function OptionsPage() {
 
   // Live spot for the underlying (per-second)
   const { data: spotQuotes } = useQuery({
-    queryKey: ["order-quote", symbol],
+    queryKey: [activeBroker(), "order-quote", symbol],
     queryFn: () => getQuotes([symbol]),
     enabled: symbol.trim().length > 0,
     refetchInterval: 1_000,
@@ -47,7 +48,7 @@ function OptionsPage() {
   // 1) Strikes for the month — ONE fast round-trip; the ladder can render from
   // this before any contract ids resolve, so there's no 10s blank spinner.
   const { data: strikes = [], isLoading: strikesLoading } = useQuery({
-    queryKey: ["opt-strikes", meta?.conid, activeMonth],
+    queryKey: [activeBroker(), "opt-strikes", meta?.conid, activeMonth],
     queryFn: () => getOptionStrikes(meta!.conid, activeMonth),
     enabled: !!meta?.conid && !!activeMonth,
     staleTime: 10 * 60_000,
@@ -73,7 +74,7 @@ function OptionsPage() {
   // 2) Resolve call+put contract ids for the picked strikes (cached per
   // underlying, so re-opening the chain is instant).
   const { data: contracts = [], isFetching: contractsLoading } = useQuery({
-    queryKey: ["opt-contracts", meta?.conid, activeMonth, pickedStrikes.join(",")],
+    queryKey: [activeBroker(), "opt-contracts", meta?.conid, activeMonth, pickedStrikes.join(",")],
     queryFn: () => resolveOptionContracts(meta!.conid, activeMonth, pickedStrikes),
     enabled: !!meta?.conid && !!activeMonth && pickedStrikes.length > 0,
     staleTime: 10 * 60_000,
@@ -108,7 +109,7 @@ function OptionsPage() {
     [rows]
   );
   const { data: optQuotes = [] } = useQuery({
-    queryKey: ["opt-quotes", visibleConids.join(",")],
+    queryKey: [activeBroker(), "opt-quotes", visibleConids.join(",")],
     queryFn: () => getOptionQuotes(visibleConids),
     enabled: visibleConids.length > 0,
     refetchInterval: 1_000,

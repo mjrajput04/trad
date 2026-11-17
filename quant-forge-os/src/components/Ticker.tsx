@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { getQuotes } from "@/lib/api/broker";
 import { UNIVERSE_SYMBOLS } from "@/lib/symbols";
 import { fmtMoney } from "@/lib/market-data";
+import { activeBroker } from "@/lib/broker";
 
 export function Ticker() {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export function Ticker() {
   // the PRICES ON THE CARDS freezing. Nobody reads an exact number off a
   // scrolling marquee; the cards and the trade popup stay fast.
   const { data: quotes = [] } = useQuery({
-    queryKey: ["ticker-quotes"],
+    queryKey: [activeBroker(), "ticker-quotes"],
     queryFn: () => getQuotes(UNIVERSE_SYMBOLS),
     refetchInterval: 6_000,
     staleTime: 3_000,

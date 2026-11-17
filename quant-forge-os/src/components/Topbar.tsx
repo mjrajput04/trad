@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export function Topbar() {
   const [now, setNow] = useState<Date | null>(null);
@@ -29,7 +30,7 @@ export function Topbar() {
   const qc = useQueryClient();
 
   const { data: authStatus } = useQuery({
-    queryKey: ["ibkr-auth"],
+    queryKey: [activeBroker(), "ibkr-auth"],
     queryFn: getAuthStatus,
     refetchInterval: 30_000,
   });

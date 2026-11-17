@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { toast } from "sonner";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/positions")({
   head: () => ({ meta: [{ title: "Positions · NOVA" }] }),
@@ -20,7 +21,7 @@ function Positions() {
   const tradingOff = !useTradingAllowed(user?.email).allowed;
 
   const { data: positions = [], isLoading, isError, error } = useQuery({
-    queryKey: ["ibkr-positions"],
+    queryKey: [activeBroker(), "ibkr-positions"],
     queryFn: getPositions,
     refetchInterval: 5_000,
   });
@@ -29,9 +30,9 @@ function Positions() {
     mutationFn: (p: Position) => closePosition(p.conid, p.quantity),
     onSuccess: (result) => {
       toast.success(`Close order sent to ${brokerInfo().short} — #${result.orderId} (${result.status})`);
-      qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-positions"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-orders"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-summary"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Close failed"),
   });

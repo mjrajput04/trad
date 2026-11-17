@@ -6,6 +6,7 @@ import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export interface QuickTradeDefaults {
   /** Suggested entry/limit price (e.g. the alert's entry). */
@@ -66,14 +67,14 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
   const [tp, setTp] = useState<number>(defaults?.takeProfit ?? 0);
 
   const { data: quotes } = useQuery({
-    queryKey: ["order-quote", symbol],
+    queryKey: [activeBroker(), "order-quote", symbol],
     queryFn: () => getQuotes([symbol]),
     refetchInterval: 3_000,
   });
   const now = quotes?.[0]?.last ?? 0;
 
   const { data: summary } = useQuery({
-    queryKey: ["ibkr-summary"],
+    queryKey: [activeBroker(), "ibkr-summary"],
     queryFn: getAccountSummary,
     staleTime: 30_000,
   });
@@ -145,9 +146,9 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
           );
         }
       });
-      qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-orders"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-positions"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-summary"] });
       onClose();
     },
     onError: (e: any) => toast.error(e?.message ?? "Order failed"),

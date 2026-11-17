@@ -14,6 +14,7 @@ import {
   getQuotes, getOptionQuotes, findOptionPlay, getPositions,
   type OptionContract, type OptionQuote, type SymbolQuote,
 } from "./api/broker";
+import { activeBroker } from "@/lib/broker";
 
 const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
 
@@ -53,7 +54,7 @@ export function useFnoSignals(): FnoContext {
 
   // Your live IBKR positions — a HELD contract's card never hides until sold.
   const { data: positions = [] } = useQuery({
-    queryKey: ["ibkr-positions"],
+    queryKey: [activeBroker(), "ibkr-positions"],
     queryFn: getPositions,
     refetchInterval: 15_000,
     retry: false,
@@ -73,7 +74,7 @@ export function useFnoSignals(): FnoContext {
   const candidateSyms = validAlerts.slice(0, 8).map((a) => a.symbol);
   const underlyings = [...new Set([...candidateSyms, ...INDEX_SYMS])];
   const { data: uq = [] } = useQuery({
-    queryKey: ["fno-underlyings", underlyings.join(",")],
+    queryKey: [activeBroker(), "fno-underlyings", underlyings.join(",")],
     queryFn: () => getQuotes(underlyings),
     enabled: underlyings.length > 0,
     refetchInterval: 1_000,
@@ -105,7 +106,7 @@ export function useFnoSignals(): FnoContext {
   // Cached by React Query key; contract ids don't move so this is cheap.
   const sigKey = workingAlerts.map((a) => a.symbol).join(",") + (marketFalling ? "+SPYPUT" : "");
   const { data: resolved = [], isFetching: resolving } = useQuery({
-    queryKey: ["fno-contracts", sigKey],
+    queryKey: [activeBroker(), "fno-contracts", sigKey],
     queryFn: async () => {
       const out: Array<Pick<FnoSignal, "key" | "label" | "underlying" | "right" | "score" | "contract" | "alert">> = [];
       for (const a of workingAlerts) {
@@ -129,7 +130,7 @@ export function useFnoSignals(): FnoContext {
   // Live premiums + greeks for the resolved contracts (per-second).
   const conids = resolved.map((s) => s.contract.conid);
   const { data: prem = [] } = useQuery({
-    queryKey: ["fno-premiums", conids.join(",")],
+    queryKey: [activeBroker(), "fno-premiums", conids.join(",")],
     queryFn: () => getOptionQuotes(conids),
     enabled: conids.length > 0,
     refetchInterval: 1_000,

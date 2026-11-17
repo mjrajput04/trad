@@ -16,6 +16,7 @@ import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTrad
 import { Level, LevelBar } from "@/components/TradeLevels";
 import { fmtMoney } from "@/lib/market-data";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/alerts")({
   head: () => ({ meta: [{ title: "AI Stock Alerts · NOVA" }, { name: "description", content: "Live AI buy alerts with entry / target / stop, powered by the TradeScope engine." }] }),
@@ -79,7 +80,7 @@ function Alerts() {
 
   // Your live IBKR holdings — drives the Sell button + owned-qty prefill.
   const { data: positions = [] } = useQuery({
-    queryKey: ["ibkr-positions"],
+    queryKey: [activeBroker(), "ibkr-positions"],
     queryFn: getPositions,
     refetchInterval: 15_000,
     retry: false,
@@ -126,7 +127,7 @@ function Alerts() {
   const symsRef = useRef<string[]>([]);
   symsRef.current = displaySyms;
   const { data: ibkrQuotes = [] } = useQuery({
-    queryKey: ["ibkr-live-quotes"],
+    queryKey: [activeBroker(), "ibkr-live-quotes"],
     queryFn: () => getQuotes(symsRef.current),
     enabled: displaySyms.length > 0,
     refetchInterval: 3_000,

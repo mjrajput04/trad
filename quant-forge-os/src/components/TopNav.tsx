@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 // Single-row navigation used by every account except the control one, which
 // keeps the original sidebar terminal. Logo, every section and the account
@@ -66,7 +67,7 @@ export function TopNav() {
   const qc = useQueryClient();
 
   const { data: authStatus } = useQuery({
-    queryKey: ["ibkr-auth"],
+    queryKey: [activeBroker(), "ibkr-auth"],
     queryFn: getAuthStatus,
     refetchInterval: 30_000,
   });

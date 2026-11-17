@@ -9,6 +9,7 @@ import { QuickTradeModal } from "@/components/QuickTradeModal";
 import { TradingViewChart } from "@/components/TradingViewChart";
 import { fmtCompact, fmtMoney } from "@/lib/market-data";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/stock/$symbol")({
   component: StockDetail,
@@ -24,7 +25,7 @@ function StockDetail() {
 
   // Live IBKR quote (2s tick) — drives the header + market data panel.
   const { data: quotes, isLoading, isError } = useQuery({
-    queryKey: ["order-quote", sym],
+    queryKey: [activeBroker(), "order-quote", sym],
     queryFn: () => getQuotes([sym]),
     refetchInterval: 2_000,
     enabled: sym.length > 0,
@@ -34,7 +35,7 @@ function StockDetail() {
 
   // Holdings → Sell button with owned quantity.
   const { data: positions = [] } = useQuery({
-    queryKey: ["ibkr-positions"],
+    queryKey: [activeBroker(), "ibkr-positions"],
     queryFn: getPositions,
     refetchInterval: 15_000,
     retry: false,

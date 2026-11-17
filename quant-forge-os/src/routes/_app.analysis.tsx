@@ -6,6 +6,7 @@ import { getAccountSummary, getPositions, type Trade } from "@/lib/api/broker";
 import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/analysis")({
   head: () => ({ meta: [{ title: "Analysis · NOVA" }, { name: "description", content: "Where your profit and loss actually came from." }] }),
@@ -129,18 +130,18 @@ function computeRealized(trades: Trade[]) {
 function Analysis() {
   const { data: trades = [], isLoading, isError, error } = useQuery({
     // Full archived history (our DB) + IBKR's live week — not just 7 days.
-    queryKey: ["trades-all-time"],
+    queryKey: [activeBroker(), "trades-all-time"],
     queryFn: getTradesAllTime,
     refetchInterval: 15_000, // provisional fills make fresh trades visible in seconds
   });
   const { data: positions = [] } = useQuery({
-    queryKey: ["ibkr-positions"],
+    queryKey: [activeBroker(), "ibkr-positions"],
     queryFn: getPositions,
     refetchInterval: 15_000,
     retry: false,
   });
   const { data: summary } = useQuery({
-    queryKey: ["ibkr-summary"],
+    queryKey: [activeBroker(), "ibkr-summary"],
     queryFn: getAccountSummary,
     refetchInterval: 30_000,
   });

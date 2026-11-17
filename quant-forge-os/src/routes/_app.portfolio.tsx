@@ -5,6 +5,7 @@ import { Brain, ShieldAlert, TrendingUp, Wallet, Loader2 } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { fmtMoney } from "@/lib/market-data";
 import { getAccountSummary, getPositions } from "@/lib/api/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/portfolio")({
   head: () => ({ meta: [{ title: "Portfolio · NOVA" }] }),
@@ -15,13 +16,13 @@ const COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--cha
 
 function Portfolio() {
   const { data: summary, isLoading: loadingSummary } = useQuery({
-    queryKey: ["ibkr-summary"],
+    queryKey: [activeBroker(), "ibkr-summary"],
     queryFn: getAccountSummary,
     refetchInterval: 10_000,
   });
 
   const { data: positions = [], isLoading: loadingPos } = useQuery({
-    queryKey: ["ibkr-positions"],
+    queryKey: [activeBroker(), "ibkr-positions"],
     queryFn: getPositions,
     refetchInterval: 10_000,
   });

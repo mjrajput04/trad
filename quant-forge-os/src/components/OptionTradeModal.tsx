@@ -5,6 +5,7 @@ import { getAccountSummary, placeOrder, type OptionContract, type OptionQuote } 
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
+import { activeBroker } from "@/lib/broker";
 
 /** Human date from an IBKR YYYYMMDD maturity string. */
 export const fmtExpiry = (ymd: string) => {
@@ -46,7 +47,7 @@ export function OptionTradeModal({ symbol, contract, quote, defaultStop, default
   });
   const [tp, setTp] = useState<number>(defaultTarget && defaultTarget > mid ? +defaultTarget.toFixed(2) : 0);
 
-  const { data: summary } = useQuery({ queryKey: ["ibkr-summary"], queryFn: getAccountSummary, staleTime: 30_000 });
+  const { data: summary } = useQuery({ queryKey: [activeBroker(), "ibkr-summary"], queryFn: getAccountSummary, staleTime: 30_000 });
   const netLiq = summary?.netLiquidation ?? 0;
   const avail = summary?.availableFunds || netLiq;
 
@@ -103,9 +104,9 @@ export function OptionTradeModal({ symbol, contract, quote, defaultStop, default
     },
     onSuccess: (r) => {
       toast.success(`${side} ${qty}x ${desc} sent — #${r.orderId} (${r.status})`);
-      qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
-      qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-orders"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-positions"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-summary"] });
       onClose();
     },
     onError: (e: any) => toast.error(e?.message ?? "Order failed"),

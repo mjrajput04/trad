@@ -4,6 +4,7 @@ import { AlertTriangle, Loader2, History as HistoryIcon } from "lucide-react";
 import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/history")({
   head: () => ({ meta: [{ title: "History · NOVA" }, { name: "description", content: `Your executed ${brokerInfo().short} trades.` }] }),
@@ -23,7 +24,7 @@ function History() {
   const { data: trades = [], isLoading, isError, error } = useQuery({
     // IBKR's week of executions gets archived into our own DB on every load,
     // so this returns ALL-TIME history, not just 7 days.
-    queryKey: ["trades-all-time"],
+    queryKey: [activeBroker(), "trades-all-time"],
     queryFn: getTradesAllTime,
     refetchInterval: 10_000, // provisional fills make fresh trades visible in seconds
   });

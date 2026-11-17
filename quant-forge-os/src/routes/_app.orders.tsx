@@ -6,6 +6,7 @@ import { Check, Clock, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/orders")({
   head: () => ({ meta: [{ title: "Orders · NOVA" }] }),
@@ -29,14 +30,14 @@ function Orders() {
   const qc = useQueryClient();
 
   const { data: allOrders = [], isLoading } = useQuery({
-    queryKey: ["ibkr-orders"],
+    queryKey: [activeBroker(), "ibkr-orders"],
     queryFn: getOrders,
     refetchInterval: 3_000,
   });
 
   const cancel = useMutation({
     mutationFn: (orderId: string) => cancelOrder(orderId),
-    onSuccess: () => { toast.success("Order cancelled"); qc.invalidateQueries({ queryKey: ["ibkr-orders"] }); },
+    onSuccess: () => { toast.success("Order cancelled"); qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-orders"] }); },
     onError: (e: any) => toast.error(e?.message ?? "Cancel failed"),
   });
 

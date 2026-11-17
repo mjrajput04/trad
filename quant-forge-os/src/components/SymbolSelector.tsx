@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 interface SymbolSelectorProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export function SymbolSelector({ isOpen, onClose, onSelect, selectedSymbols = []
 
   // Live IBKR search so ANY US stock can be added, not just the universe.
   const { data: remote = [], isFetching } = useQuery({
-    queryKey: ["ibkr-symbol-search", debounced],
+    queryKey: [activeBroker(), "ibkr-symbol-search", debounced],
     queryFn: () => searchSymbols(debounced),
     enabled: isOpen && debounced.length >= 2,
     staleTime: 60_000,

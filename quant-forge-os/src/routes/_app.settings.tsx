@@ -8,6 +8,7 @@ import { AdminUsers } from "@/components/AdminUsers";
 import { NasscordToggle, isNasscordAdmin } from "@/components/MaintenanceGate";
 import { TradingControl } from "@/components/TradingControl";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 const ADMIN_EMAIL = "nssphx@gmail.com";
 
@@ -21,7 +22,7 @@ function Settings() {
   const { isPaper, setIsPaper, paperConfigured, liveAccount, paperAccount, currentAccount } = useTrading();
 
   const { data: authStatus } = useQuery({
-    queryKey: ["ibkr-auth"],
+    queryKey: [activeBroker(), "ibkr-auth"],
     queryFn: getAuthStatus,
     refetchInterval: 30_000,
   });

@@ -4,6 +4,7 @@ import { searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 import { Loader2 } from "lucide-react";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 function useDebounced<T>(value: T, delay: number): T {
   const [d, setD] = useState(value);
@@ -43,7 +44,7 @@ export function SymbolPicker({
       : [];
   const dq = useDebounced(q, 350);
   const { data: remote = [], isFetching } = useQuery({
-    queryKey: ["order-symbol-search", dq],
+    queryKey: [activeBroker(), "order-symbol-search", dq],
     queryFn: () => searchSymbols(dq),
     enabled: open && dq.length >= 1,
     staleTime: 60_000,

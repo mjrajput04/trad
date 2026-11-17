@@ -7,6 +7,7 @@ import { Delta } from "@/components/Delta";
 import { Radar, Zap, TrendingUp, TrendingDown, Activity, Loader2 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { brokerInfo } from "@/lib/broker";
+import { activeBroker } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/scanner")({
   head: () => ({ meta: [{ title: "Scanner · NOVA" }, { name: "description", content: `Realtime scans over live ${brokerInfo().short} quotes — movers, volume, gaps.` }] }),
@@ -29,7 +30,7 @@ function ScannerPage() {
   const [activeScanner, setActiveScanner] = useState<ScannerDef>(SCANNERS[0]);
 
   const { data: quotes = [], isLoading, dataUpdatedAt } = useQuery({
-    queryKey: ["scanner-quotes"],
+    queryKey: [activeBroker(), "scanner-quotes"],
     queryFn: () => getQuotes(UNIVERSE_SYMBOLS),
     refetchInterval: 3000,
     staleTime: 1500,
