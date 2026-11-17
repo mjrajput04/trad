@@ -4,7 +4,7 @@
 // and Analysis then read the full archive instead of just the last week.
 
 import { supabase } from "@/integrations/supabase/client";
-import { getTrades, getOrders, type Trade } from "./api/ibkr";
+import { getTrades, getOrders, type Trade } from "./api/broker";
 
 // The generated Database types predate this table — keep the cast contained here.
 // Each deployed instance archives into its own table (VITE_TRADES_TABLE), so a

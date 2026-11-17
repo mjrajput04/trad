@@ -13,7 +13,7 @@ import { getTsAlerts, type TsAlert } from "./api/alerts";
 import {
   getQuotes, getOptionQuotes, findOptionPlay, getPositions,
   type OptionContract, type OptionQuote, type SymbolQuote,
-} from "./api/ibkr";
+} from "./api/broker";
 
 const INDEX_SYMS = ["SPY", "QQQ", "DIA", "IWM"];
 

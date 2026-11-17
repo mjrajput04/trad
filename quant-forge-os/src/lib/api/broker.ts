@@ -58,6 +58,12 @@ export const tickle = (...a: Parameters<BrokerApi["tickle"]>) => impl().tickle(.
 
 /* ------------------------------------------------------------ account */
 
+// Named for IBKR because the whole app already is; E*TRADE's layer keeps the
+// same storage key and event so trading-context needs nothing but this import.
+export const getIBKRAccount = (...a: Parameters<BrokerApi["getIBKRAccount"]>) => impl().getIBKRAccount(...a);
+export const setIBKRAccount = (...a: Parameters<BrokerApi["setIBKRAccount"]>) => impl().setIBKRAccount(...a);
+export const invalidatePositionsCache = (...a: Parameters<BrokerApi["invalidatePositionsCache"]>) => impl().invalidatePositionsCache(...a);
+
 export const getAccountSummary = (...a: Parameters<BrokerApi["getAccountSummary"]>) => impl().getAccountSummary(...a);
 export const getPositions = (...a: Parameters<BrokerApi["getPositions"]>) => impl().getPositions(...a);
 export const getOrders = (...a: Parameters<BrokerApi["getOrders"]>) => impl().getOrders(...a);
