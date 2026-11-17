@@ -28,14 +28,17 @@ export const GATEWAY_LOGIN_URL = "/broker";
 
 // The account this instance trades. Pinned by env when set; otherwise adopted from
 // /v1/accounts/list after the first login (same multi-account model as the IBKR build).
-const ENV_ACCOUNT: string =
-  import.meta.env.VITE_ETRADE_ACCOUNT_ID_KEY ?? import.meta.env.VITE_IBKR_ACCOUNT_ID ?? "";
+// Only E*TRADE's own pin. The original port fell back to VITE_IBKR_ACCOUNT_ID
+// because it was a fork that replaced IBKR entirely; in a build that serves
+// both, that fallback hands E*TRADE an IBKR account number and every call
+// answers "Please enter valid Account Key".
+const ENV_ACCOUNT: string = import.meta.env.VITE_ETRADE_ACCOUNT_ID_KEY ?? "";
 let CURRENT_ACCOUNT = ENV_ACCOUNT;
 
-// Storage/event names are deliberately unchanged from the IBKR build so trading-context.tsx
-// needs nothing but a new import path.
-const ACCOUNT_KEY = "nova_ibkr_account";
-const ACCOUNT_EVENT = "nova:ibkr-account";
+// Its own slot. Sharing one with IBKR was fine while this was a fork; with
+// both brokers in one build the two accounts would overwrite each other.
+const ACCOUNT_KEY = "nova_etrade_account";
+const ACCOUNT_EVENT = "nova:etrade-account";
 
 if (typeof window !== "undefined" && !CURRENT_ACCOUNT) {
   try {

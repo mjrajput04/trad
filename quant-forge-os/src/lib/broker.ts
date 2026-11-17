@@ -74,6 +74,24 @@ export function brokerInfo(id: BrokerId = activeBroker()): BrokerInfo {
   return BROKERS.find((b) => b.id === id) ?? BROKERS[0];
 }
 
+/* ------------------------------------------------------- which account */
+// An account number belongs to ONE broker. The first dual-broker build kept a
+// single slot for both, so selecting E*TRADE sent it the IBKR account number
+// and every call came back "Please enter valid Account Key". Each broker now
+// has its own storage slot, its own announcement and its own env override.
+
+export const accountStorageKey = (id: BrokerId = activeBroker()): string =>
+  id === "etrade" ? "nova_etrade_account" : "nova_ibkr_account";
+
+export const accountChangeEvent = (id: BrokerId = activeBroker()): string =>
+  id === "etrade" ? "nova:etrade-account" : "nova:ibkr-account";
+
+/** Pinned by env, or "" to adopt whatever the broker reports after sign-in. */
+export const envAccount = (id: BrokerId = activeBroker()): string =>
+  (id === "etrade"
+    ? import.meta.env.VITE_ETRADE_ACCOUNT_ID_KEY
+    : import.meta.env.VITE_IBKR_ACCOUNT_ID) ?? "";
+
 /** Subscribe to the choice; returns an unsubscribe. */
 export function onBrokerChange(fn: (id: BrokerId) => void): () => void {
   if (typeof window === "undefined") return () => {};
