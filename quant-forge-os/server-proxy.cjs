@@ -23,7 +23,13 @@ function isAllowedOrigin(origin) {
 }
 
 // CORS preflight (handled here so it never reaches the gateway)
-app.options('*', (req, res) => {
+// A plain middleware rather than app.options('*'): the second client's install
+// resolved Express 5, whose router rejects a bare '*' path outright, so that
+// one line crash-looped its proxy from boot and port 8003 never opened. The
+// owner's install is still on Express 4, where the v5 spelling ('/*splat')
+// would be just as wrong — a middleware is the one form both routers accept.
+app.use((req, res, next) => {
+  if (req.method !== 'OPTIONS') return next();
   const origin = req.headers.origin;
   if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
