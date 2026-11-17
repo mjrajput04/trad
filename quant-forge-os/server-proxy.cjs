@@ -185,7 +185,7 @@ app.use((req, res, next) => {
 // never came up. These paths are the gateway's own login flow; a hit on one
 // from a browser means hands are on it, so the keepalive stands down.
 const LOGIN_PATHS = /\/sso\/(Login|Authenticator|Dispatcher|Validate)\b/i;
-const LOGIN_GRACE_MS = 3 * 60_000;
+const LOGIN_GRACE_MS = 5 * 60_000;
 let lastHumanLoginAt = 0;
 app.use((req, res, next) => {
   if (req.headers['x-forwarded-for'] && LOGIN_PATHS.test(req.path)) lastHumanLoginAt = Date.now();
@@ -382,10 +382,28 @@ async function gw(path, body) {
 
 let keepaliveBusy = false;
 let lastDeadSsoLog = 0;
+// `compete: true` means TAKE THE BROKERAGE SESSION FROM WHOEVER HOLDS IT, and
+// this runs on a 60-second timer. That is a demolition charge on a loop.
+//
+// Forensics, 16 Nov 2026: between 06:18 and 06:34 this loop minted fifteen
+// brokerage sessions and forced fifteen portal logouts with no browser
+// involved, and that is what ended a session that had been healthy for a day.
+// Worse, it then fired into every attempt to sign in again: a person completed
+// two-factor, the gateway logged "Client login succeeds", and within the
+// minute this took the half-built session away from them. The broker's answer
+// to the gateway's own sso/validate was "Access Denied", which reads exactly
+// like a lockout and sent the diagnosis chasing the broker for a day.
+//
+// So the keepalive no longer competes. It publishes - which attaches to the
+// session that exists - and leaves the taking to a human who has decided to
+// take it. KEEPALIVE_COMPETE=1 restores the old behaviour for the rare case
+// where a known-dead server-side session really is holding the slot.
+const KEEPALIVE_COMPETE = process.env.KEEPALIVE_COMPETE === '1';
+
 async function establishBridge(reason) {
-  console.log(`[keepalive] ${reason} — re-establishing brokerage bridge`);
+  console.log(`[keepalive] ${reason} — attaching to the brokerage session (compete=${KEEPALIVE_COMPETE})`);
   await gw('/iserver/reauthenticate').catch(() => {});
-  await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: true })).catch(() => {});
+  await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: KEEPALIVE_COMPETE })).catch(() => {});
   // Prime accounts + warm the market-data farm so real-time prices flow again
   // (a re-auth alone leaves /accounts 400 and snapshots empty for a moment).
   await fetch(`${GW}/iserver/accounts`).catch(() => {});
