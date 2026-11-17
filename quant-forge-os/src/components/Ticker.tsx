@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { getQuotes } from "@/lib/api/ibkr";
+import { getQuotes } from "@/lib/api/broker";
 import { UNIVERSE_SYMBOLS } from "@/lib/symbols";
 import { fmtMoney } from "@/lib/market-data";
 

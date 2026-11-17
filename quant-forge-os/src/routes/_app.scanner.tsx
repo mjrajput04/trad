@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fmtMoney } from "@/lib/market-data";
-import { getQuotes } from "@/lib/api/ibkr";
+import { getQuotes } from "@/lib/api/broker";
 import { UNIVERSE_SYMBOLS } from "@/lib/symbols";
 import { Delta } from "@/components/Delta";
 import { Radar, Zap, TrendingUp, TrendingDown, Activity, Loader2 } from "lucide-react";

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTrading } from "@/lib/trading-context";
-import { getAuthStatus, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { getAuthStatus, gatewayLoginUrl } from "@/lib/api/broker";
 import { AdminUsers } from "@/components/AdminUsers";
 import { NasscordToggle, isNasscordAdmin } from "@/components/MaintenanceGate";
 import { TradingControl } from "@/components/TradingControl";
@@ -43,7 +43,7 @@ function Settings() {
 
       <section className="rounded-2xl glass overflow-hidden">
         <div className="px-5 py-3 hairline-b text-sm font-semibold">IBKR Connection</div>
-        <Row label="Gateway" value={GATEWAY_LOGIN_URL} />
+        <Row label="Gateway" value={gatewayLoginUrl()} />
         <Row
           label="Session"
           value={
@@ -56,7 +56,7 @@ function Settings() {
         />
         <Row label="Active account" value={currentAccount} />
         <div className="px-5 py-3.5 flex justify-end">
-          <a href={GATEWAY_LOGIN_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] text-info hover:underline">
+          <a href={gatewayLoginUrl()} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] text-info hover:underline">
             <ExternalLink className="h-3 w-3" /> Open gateway login
           </a>
         </div>

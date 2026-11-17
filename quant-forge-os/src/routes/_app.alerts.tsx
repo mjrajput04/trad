@@ -11,7 +11,7 @@ import {
   getTsAlerts, getTsQuotes, getTsBacktest, getTsSymbolQuotes, bracketStop,
   type TsAlert, type TsBacktest,
 } from "@/lib/api/alerts";
-import { getPositions, getQuotes, type Position } from "@/lib/api/ibkr";
+import { getPositions, getQuotes, type Position } from "@/lib/api/broker";
 import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTradeModal";
 import { Level, LevelBar } from "@/components/TradeLevels";
 import { fmtMoney } from "@/lib/market-data";

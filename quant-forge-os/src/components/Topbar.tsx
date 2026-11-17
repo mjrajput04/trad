@@ -8,7 +8,7 @@ import { SymbolSearch } from "./SymbolSearch";
 import { useAuth } from "@/lib/auth-context";
 import { useTrading } from "@/lib/trading-context";
 import { useTheme } from "@/lib/theme";
-import { getAuthStatus, ensureSession, tickle, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { getAuthStatus, ensureSession, tickle, gatewayLoginUrl } from "@/lib/api/broker";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +49,7 @@ export function Topbar() {
         return;
       }
       toast.info("Session expired — one person must log in to IBKR (opening login page)");
-      window.open(GATEWAY_LOGIN_URL, "_blank", "noopener");
+      window.open(gatewayLoginUrl(), "_blank", "noopener");
     } finally {
       setReviving(false);
     }

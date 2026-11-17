@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Delta } from "@/components/Delta";
 import { fmtMoney } from "@/lib/market-data";
-import { getPositions, closePosition, type Position } from "@/lib/api/ibkr";
+import { getPositions, closePosition, type Position } from "@/lib/api/broker";
 import { AlertTriangle, Loader2, X, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";

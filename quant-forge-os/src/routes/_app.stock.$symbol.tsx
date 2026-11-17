@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Loader2, TrendingUp, TrendingDown, Lock } from "lucide-react";
-import { getQuotes, getPositions } from "@/lib/api/ibkr";
+import { getQuotes, getPositions } from "@/lib/api/broker";
 import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { QuickTradeModal } from "@/components/QuickTradeModal";

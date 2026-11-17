@@ -5,7 +5,7 @@ import { AlertTriangle, Coins, Loader2, Sparkles, ArrowRight } from "lucide-reac
 import {
   getOptionMeta, getOptionStrikes, pickNearestStrikes, resolveOptionContracts,
   getOptionQuotes, getQuotes, type OptionContract, type OptionQuote,
-} from "@/lib/api/ibkr";
+} from "@/lib/api/broker";
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { OptionTradeModal, fmtExpiry } from "@/components/OptionTradeModal";
 import { fmtMoney } from "@/lib/market-data";

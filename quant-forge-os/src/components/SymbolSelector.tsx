@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Search, X, Plus, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { searchSymbols } from "@/lib/api/ibkr";
+import { searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 
 interface SymbolSelectorProps {

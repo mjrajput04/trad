@@ -4,7 +4,7 @@ import { Delta } from "@/components/Delta";
 import { Brain, ShieldAlert, TrendingUp, Wallet, Loader2 } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { fmtMoney } from "@/lib/market-data";
-import { getAccountSummary, getPositions } from "@/lib/api/ibkr";
+import { getAccountSummary, getPositions } from "@/lib/api/broker";
 
 export const Route = createFileRoute("/_app/portfolio")({
   head: () => ({ meta: [{ title: "Portfolio · NOVA" }] }),

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Search, Command, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getQuotes, searchSymbols } from "@/lib/api/ibkr";
+import { getQuotes, searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 import { fmtMoney } from "@/lib/market-data";
 import { Delta } from "./Delta";

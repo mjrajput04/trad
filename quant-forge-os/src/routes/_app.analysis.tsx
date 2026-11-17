@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, BarChart3, Loader2, Trophy, TrendingDown } from "lucide-react";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getAccountSummary, getPositions, type Trade } from "@/lib/api/ibkr";
+import { getAccountSummary, getPositions, type Trade } from "@/lib/api/broker";
 import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
 

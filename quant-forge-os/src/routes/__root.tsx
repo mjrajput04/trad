@@ -124,7 +124,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-import { startSessionKeepalive } from "@/lib/api/ibkr";
+import { startSessionKeepalive } from "@/lib/api/broker";
 
 function AuthListener() {
   const router = useRouter();

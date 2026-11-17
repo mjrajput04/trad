@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, X, Zap } from "lucide-react";
-import { cancelWorkingOrders, getAccountSummary, getQuotes, placeOrder, verifyOrderLive } from "@/lib/api/ibkr";
+import { cancelWorkingOrders, getAccountSummary, getQuotes, placeOrder, verifyOrderLive } from "@/lib/api/broker";
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";

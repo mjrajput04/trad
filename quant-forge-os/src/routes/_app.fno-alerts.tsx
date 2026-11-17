@@ -8,7 +8,7 @@ import { useFnoSignals, type FnoSignal } from "@/lib/fno-signals";
 import { getTsBacktest, type TsBacktest, type TsAlert } from "@/lib/api/alerts";
 import { OptionTradeModal, fmtExpiry } from "@/components/OptionTradeModal";
 import { Level, LevelBar } from "@/components/TradeLevels";
-import { type OptionContract, type OptionQuote } from "@/lib/api/ibkr";
+import { type OptionContract, type OptionQuote } from "@/lib/api/broker";
 import { fmtMoney } from "@/lib/market-data";
 import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";

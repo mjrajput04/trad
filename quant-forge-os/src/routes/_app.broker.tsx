@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LiveDot } from "@/components/Delta";
 import { Check, ExternalLink, Plug, RefreshCw, Shield, Zap, Loader2, X, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, verifyOrderLive, GATEWAY_LOGIN_URL } from "@/lib/api/ibkr";
+import { getAccountSummary, getAuthStatus, placeOrder, tickle, ensureSession, getQuotes, verifyOrderLive, gatewayLoginUrl } from "@/lib/api/broker";
 import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { useTrading } from "@/lib/trading-context";
+import { activeBroker, brokerInfo } from "@/lib/broker";
+import { EtradeConnect } from "@/components/EtradeConnect";
 import { fmtMoney } from "@/lib/market-data";
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { toast } from "sonner";
@@ -241,11 +243,19 @@ function Broker() {
             )}
           </div>
 
+          {/* How you connect depends on the broker: IBKR hands you off to its own
+              gateway page, E*TRADE runs an OAuth dance that stays on this page. */}
           {!connected && (
-            <a href={GATEWAY_LOGIN_URL} target="_blank" rel="noreferrer"
-              className="mt-3 flex items-center justify-center gap-2 h-10 rounded-lg bg-primary/15 text-primary text-xs font-semibold hover:bg-primary/25 transition">
-              <ExternalLink className="h-3.5 w-3.5" /> Log in to IBKR Gateway
-            </a>
+            activeBroker() === "etrade" ? (
+              <div className="mt-3">
+                <EtradeConnect status={auth} />
+              </div>
+            ) : (
+              <a href={gatewayLoginUrl()} target="_blank" rel="noreferrer"
+                className="mt-3 flex items-center justify-center gap-2 h-10 rounded-lg bg-primary/15 text-primary text-xs font-semibold hover:bg-primary/25 transition">
+                <ExternalLink className="h-3.5 w-3.5" /> Log in to {brokerInfo().short} Gateway
+              </a>
+            )
           )}
 
           <div className="mt-3 flex gap-2">

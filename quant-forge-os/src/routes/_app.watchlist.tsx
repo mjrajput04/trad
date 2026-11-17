@@ -5,7 +5,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { Delta } from "@/components/Delta";
 import { SymbolSelector } from "@/components/SymbolSelector";
 import { fmtCompact, fmtMoney } from "@/lib/market-data";
-import { getQuotes, resolveConids, getChartData } from "@/lib/api/ibkr";
+import { getQuotes, resolveConids, getChartData } from "@/lib/api/broker";
 import { 
   getWatchlists, 
   getWatchlistWithItems, 
