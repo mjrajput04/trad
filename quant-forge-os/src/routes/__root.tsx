@@ -15,6 +15,7 @@ import { TradingProvider } from "@/lib/trading-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { useTheme } from "@/lib/theme";
+import { brokerInfo } from "@/lib/broker";
 
 function NotFoundComponent() {
   return (
@@ -79,10 +80,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "NOVA Terminal — AI Trading OS" },
-      { name: "description", content: "Premium AI-powered US stock trading terminal with IBKR integration." },
+      { name: "description", content: `Premium AI-powered US stock trading terminal with ${brokerInfo().short} integration.` },
       { name: "theme-color", content: "#0c0c14" },
       { property: "og:title", content: "NOVA Terminal" },
-      { property: "og:description", content: "Premium AI-powered US stock trading terminal with IBKR integration." },
+      { property: "og:description", content: `Premium AI-powered US stock trading terminal with ${brokerInfo().short} integration.` },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

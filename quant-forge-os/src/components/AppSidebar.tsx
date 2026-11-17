@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { brokerInfo } from "@/lib/broker";
 
 const NAV = [
   { to: "/alerts", label: "AI Stock Alerts", icon: BellRing },
@@ -35,7 +36,7 @@ const NAV = [
 ] as const;
 
 const SYS = [
-  { to: "/broker", label: "Broker / IBKR", icon: Plug },
+  { to: "/broker", label: `Broker / ${brokerInfo().short}`, icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

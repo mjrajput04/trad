@@ -9,9 +9,10 @@ import {
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { OptionTradeModal, fmtExpiry } from "@/components/OptionTradeModal";
 import { fmtMoney } from "@/lib/market-data";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/options")({
-  head: () => ({ meta: [{ title: "F&O Options · NOVA" }, { name: "description", content: "Live IBKR option chain with one-tap trading." }] }),
+  head: () => ({ meta: [{ title: "F&O Options · NOVA" }, { name: "description", content: `Live ${brokerInfo().short} option chain with one-tap trading.` }] }),
   component: OptionsPage,
 });
 
@@ -124,7 +125,7 @@ function OptionsPage() {
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Coins className="h-5 w-5 text-info" /> F&O — Options Chain
           </h1>
-          <p className="text-sm text-muted-foreground">Live IBKR option chain — tap a Call or Put to trade it.</p>
+          <p className="text-sm text-muted-foreground">Live {brokerInfo().short} option chain — tap a Call or Put to trade it.</p>
         </div>
         {spot > 0 && (
           <div className="text-right">
@@ -175,13 +176,13 @@ function OptionsPage() {
       {(metaLoading || strikesLoading) && !showLadder ? (
         <div className="rounded-2xl glass p-14 text-center text-sm text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-3" />
-          Loading strikes from IBKR…
+          Loading strikes from {brokerInfo().short}…
         </div>
       ) : metaError || meta === null ? (
         <div className="rounded-2xl glass p-10 text-center text-sm">
           <AlertTriangle className="h-6 w-6 text-warn mx-auto mb-3" />
           <div className="font-semibold mb-1">No options found for {symbol}</div>
-          <div className="text-muted-foreground text-xs">Make sure the IBKR gateway is logged in, or try another symbol.</div>
+          <div className="text-muted-foreground text-xs">Make sure the {brokerInfo().short} gateway is logged in, or try another symbol.</div>
         </div>
       ) : !showLadder ? (
         <div className="rounded-2xl glass p-10 text-center text-sm text-muted-foreground">No strikes for this month.</div>
@@ -228,7 +229,7 @@ function OptionsPage() {
           <div className="px-4 py-2 text-[10px] text-muted-foreground flex items-center gap-2">
             {contractsLoading && expiries.length === 0
               ? <><Loader2 className="h-3 w-3 animate-spin" /> resolving contracts…</>
-              : <>Live from IBKR · greeks: Δ delta · quotes tick every ~1s · 1 contract = 100 shares</>}
+              : <>Live from {brokerInfo().short} · greeks: Δ delta · quotes tick every ~1s · 1 contract = 100 shares</>}
           </div>
           </div>
           </div>

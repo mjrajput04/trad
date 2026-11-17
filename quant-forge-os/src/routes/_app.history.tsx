@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, History as HistoryIcon } from "lucide-react";
 import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/history")({
-  head: () => ({ meta: [{ title: "History · NOVA" }, { name: "description", content: "Your executed IBKR trades." }] }),
+  head: () => ({ meta: [{ title: "History · NOVA" }, { name: "description", content: `Your executed ${brokerInfo().short} trades.` }] }),
   component: History,
 });
 
@@ -47,8 +48,8 @@ function History() {
           <HistoryIcon className="h-5 w-5 text-info" /> Trade History
         </h1>
         <p className="text-sm text-muted-foreground">
-          All your executed IBKR trades — auto-archived to your own database every time the app loads
-          (IBKR itself only keeps ~7 days).
+          All your executed {brokerInfo().short} trades — auto-archived to your own database every time the app loads
+          ({brokerInfo().short} itself only keeps ~7 days).
         </p>
       </div>
 
@@ -64,13 +65,13 @@ function History() {
       ) : isError ? (
         <div className="rounded-2xl glass p-10 text-center text-sm">
           <AlertTriangle className="h-6 w-6 text-warn mx-auto mb-3" />
-          <div className="font-semibold mb-1">Could not load trade history from IBKR</div>
+          <div className="font-semibold mb-1">Could not load trade history from {brokerInfo().short}</div>
           <div className="text-muted-foreground text-xs">{(error as Error)?.message}</div>
-          <div className="text-muted-foreground text-xs mt-2">Make sure the IBKR gateway is logged in (Broker page).</div>
+          <div className="text-muted-foreground text-xs mt-2">Make sure the {brokerInfo().short} gateway is logged in (Broker page).</div>
         </div>
       ) : trades.length === 0 ? (
         <div className="rounded-2xl glass p-10 text-center text-muted-foreground text-sm">
-          No executed trades in the last 7 days. Trades placed from this app or IBKR will appear here.
+          No executed trades in the last 7 days. Trades placed from this app or {brokerInfo().short} will appear here.
         </div>
       ) : (
         <div className="space-y-4">

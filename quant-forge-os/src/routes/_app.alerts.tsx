@@ -15,6 +15,7 @@ import { getPositions, getQuotes, type Position } from "@/lib/api/broker";
 import { QuickTradeModal, type QuickTradeDefaults } from "@/components/QuickTradeModal";
 import { Level, LevelBar } from "@/components/TradeLevels";
 import { fmtMoney } from "@/lib/market-data";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/alerts")({
   head: () => ({ meta: [{ title: "AI Stock Alerts · NOVA" }, { name: "description", content: "Live AI buy alerts with entry / target / stop, powered by the TradeScope engine." }] }),
@@ -345,7 +346,7 @@ function Alerts() {
               </h2>
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 mb-3">
-              These go UP when the market falls — buying one = betting the market DOWN (all IBKR-tradable).
+              These go UP when the market falls — buying one = betting the market DOWN (all {brokerInfo().short}-tradable).
               3x versions move faster and are riskier.
             </p>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -393,7 +394,7 @@ function Alerts() {
                           </div>
                         </>
                       ) : (
-                        <div className="text-[11px] text-muted-foreground py-2">Log in to IBKR for live levels.</div>
+                        <div className="text-[11px] text-muted-foreground py-2">Log in to {brokerInfo().short} for live levels.</div>
                       )}
 
                       <TradeButtons
@@ -536,7 +537,7 @@ function HoldingCard({ p, now, onBuy, onSell }: {
       <div className="text-[11px] text-muted-foreground">
         {short
           ? `You are short ${size} — buying ${size} back closes it.`
-          : "Your live IBKR position — no active alert on this symbol right now."}
+          : `Your live ${brokerInfo().short} position — no active alert on this symbol right now.`}
       </div>
       <TradeButtons qty={p.quantity} onBuy={onBuy} onSell={onSell} />
     </div>

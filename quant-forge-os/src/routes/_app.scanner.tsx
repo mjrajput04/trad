@@ -6,9 +6,10 @@ import { UNIVERSE_SYMBOLS } from "@/lib/symbols";
 import { Delta } from "@/components/Delta";
 import { Radar, Zap, TrendingUp, TrendingDown, Activity, Loader2 } from "lucide-react";
 import { useState, useMemo } from "react";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/scanner")({
-  head: () => ({ meta: [{ title: "Scanner · NOVA" }, { name: "description", content: "Realtime scans over live IBKR quotes — movers, volume, gaps." }] }),
+  head: () => ({ meta: [{ title: "Scanner · NOVA" }, { name: "description", content: `Realtime scans over live ${brokerInfo().short} quotes — movers, volume, gaps.` }] }),
   component: ScannerPage,
 });
 
@@ -77,12 +78,12 @@ function ScannerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Market Scanner</h1>
-          <p className="text-sm text-muted-foreground">Live scans over IBKR quotes for the {UNIVERSE_SYMBOLS.length}-symbol universe.</p>
+          <p className="text-sm text-muted-foreground">Live scans over {brokerInfo().short} quotes for the {UNIVERSE_SYMBOLS.length}-symbol universe.</p>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 hairline px-2.5 py-1">
             <span className={`h-1.5 w-1.5 rounded-full ${isLoading ? "bg-warn animate-pulse" : "bg-bull pulse-dot"}`} />
-            {isLoading ? "Syncing..." : "Live from IBKR"}
+            {isLoading ? "Syncing..." : `Live from ${brokerInfo().short}`}
           </span>
         </div>
       </div>

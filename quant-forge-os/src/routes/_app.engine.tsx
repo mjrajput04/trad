@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/engine")({
   head: () => ({ meta: [{ title: "Engine · NOVA" }, { name: "robots", content: "noindex" }] }),
@@ -164,7 +165,7 @@ function EngineDashboard({ st, history }: { st: EngineStatus; history: Awaited<R
       {st.mode === "live" && (
         <div className="rounded-xl border border-bear/40 bg-bear/10 px-4 py-2.5 text-xs text-bear font-medium flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          LIVE — the engine sends real IBKR orders with your money. Each entry is a bracket (stop + target) held at IBKR.
+          LIVE — the engine sends real {brokerInfo().short} orders with your money. Each entry is a bracket (stop + target) held at {brokerInfo().short}.
         </div>
       )}
       {day.halted && (
@@ -364,7 +365,7 @@ function GatewayBadge({ st }: { st: EngineStatus }) {
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold", ok ? "bg-bull/10 text-bull" : "bg-bear/10 text-bear")}>
       <span className={cn("h-1.5 w-1.5 rounded-full", ok ? "bg-bull" : "bg-bear")} />
-      IBKR {ok ? "connected" : "not authenticated"}
+      {brokerInfo().short} {ok ? "connected" : "not authenticated"}
     </span>
   );
 }
@@ -654,13 +655,13 @@ function ArmLiveDialog({
             <Power className="h-4 w-4" /> Arm live trading
           </DialogTitle>
           <DialogDescription>
-            From the next 09:45 ET entry the engine sends real orders to IBKR with your money.
+            From the next 09:45 ET entry the engine sends real orders to {brokerInfo().short} with your money.
           </DialogDescription>
         </DialogHeader>
         <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
           <li>Up to {config.topN} trades a day, each risking about ${config.riskUsd}; target ${config.targetUsd}.</li>
           <li>Worst normal day ≈ −${worst} (daily loss limit ${config.dailyLossLimit}). Gaps through a stop can lose more.</li>
-          <li>Each entry is a bracket at IBKR, so the stop and target stay in place even if the engine stops.</li>
+          <li>Each entry is a bracket at {brokerInfo().short}, so the stop and target stay in place even if the engine stops.</li>
           <li>The engine falls back to Paper after a server restart; you re-arm Live by hand.</li>
         </ul>
         <label className="block">

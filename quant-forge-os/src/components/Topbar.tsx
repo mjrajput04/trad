@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { brokerInfo } from "@/lib/broker";
 
 export function Topbar() {
   const [now, setNow] = useState<Date | null>(null);
@@ -44,11 +45,11 @@ export function Topbar() {
       await ensureSession(true);
       const st = await getAuthStatus();
       if (st.authenticated) {
-        toast.success("IBKR session reconnected — no login needed");
+        toast.success(`${brokerInfo().short} session reconnected — no login needed`);
         qc.invalidateQueries();
         return;
       }
-      toast.info("Session expired — one person must log in to IBKR (opening login page)");
+      toast.info(`Session expired — one person must log in to ${brokerInfo().short} (opening login page)`);
       window.open(gatewayLoginUrl(), "_blank", "noopener");
     } finally {
       setReviving(false);
@@ -123,25 +124,25 @@ export function Topbar() {
             else reviveOrLogin();
           }}
           disabled={reviving}
-          title={ibkrOk ? "IBKR session active — open broker page" : "Click to reconnect (auto-tries revive first, login only if needed)"}
+          title={ibkrOk ? `${brokerInfo().short} session active — open broker page` : "Click to reconnect (auto-tries revive first, login only if needed)"}
           className={`hidden md:inline-flex items-center gap-2 rounded-lg hairline px-3 h-9 text-xs transition disabled:opacity-60 ${
           ibkrOk
             ? 'bg-bull/10 text-bull hover:bg-bull/20'
             : 'bg-bear/10 text-bear hover:bg-bear/20'
         }`}>
           {reviving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug2 className="h-3.5 w-3.5" />}
-          <span>{ibkrOk ? 'IBKR Connected' : reviving ? 'Reconnecting…' : 'IBKR Reconnect'}</span>
+          <span>{ibkrOk ? `${brokerInfo().short} Connected` : reviving ? 'Reconnecting…' : `${brokerInfo().short} Reconnect`}</span>
           <LiveDot />
         </button>
 
-        {/* compact IBKR status for phones (the full button is md+ only) */}
+        {/* compact {brokerInfo().short} status for phones (the full button is md+ only) */}
         <button
           onClick={() => {
             if (ibkrOk) navigate({ to: "/broker" });
             else reviveOrLogin();
           }}
           disabled={reviving}
-          title={ibkrOk ? "IBKR connected" : "Tap to reconnect IBKR"}
+          title={ibkrOk ? `${brokerInfo().short} connected` : `Tap to reconnect ${brokerInfo().short}`}
           className={`md:hidden h-9 w-9 grid place-items-center rounded-lg hairline transition disabled:opacity-60 ${
             ibkrOk ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
           }`}

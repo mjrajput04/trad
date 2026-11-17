@@ -7,6 +7,7 @@ import { getAuthStatus, gatewayLoginUrl } from "@/lib/api/broker";
 import { AdminUsers } from "@/components/AdminUsers";
 import { NasscordToggle, isNasscordAdmin } from "@/components/MaintenanceGate";
 import { TradingControl } from "@/components/TradingControl";
+import { brokerInfo } from "@/lib/broker";
 
 const ADMIN_EMAIL = "nssphx@gmail.com";
 
@@ -42,7 +43,7 @@ function Settings() {
       </section>
 
       <section className="rounded-2xl glass overflow-hidden">
-        <div className="px-5 py-3 hairline-b text-sm font-semibold">IBKR Connection</div>
+        <div className="px-5 py-3 hairline-b text-sm font-semibold">{brokerInfo().short} Connection</div>
         <Row label="Gateway" value={gatewayLoginUrl()} />
         <Row
           label="Session"

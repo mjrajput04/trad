@@ -17,6 +17,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { brokerInfo } from "@/lib/broker";
 
 // Single-row navigation used by every account except the control one, which
 // keeps the original sidebar terminal. Logo, every section and the account
@@ -84,11 +85,11 @@ export function TopNav() {
       await ensureSession(true);
       const st = await getAuthStatus();
       if (st.authenticated) {
-        toast.success("IBKR session reconnected");
+        toast.success(`${brokerInfo().short} session reconnected`);
         qc.invalidateQueries();
         return;
       }
-      toast.info("Session expired — opening the IBKR login page");
+      toast.info(`Session expired — opening the ${brokerInfo().short} login page`);
       window.open(gatewayLoginUrl(), "_blank", "noopener");
     } finally {
       setReviving(false);
@@ -142,7 +143,7 @@ export function TopNav() {
           <button
             onClick={() => (ibkrOk ? navigate({ to: "/broker" }) : reviveOrLogin())}
             disabled={reviving}
-            title={ibkrOk ? "IBKR session active" : "Session expired — tap to reconnect"}
+            title={ibkrOk ? `${brokerInfo().short} session active` : "Session expired — tap to reconnect"}
             className={`inline-flex items-center gap-1.5 rounded-md px-2.5 h-9 text-[11px] font-semibold transition disabled:opacity-60 ${
               ibkrOk ? "bg-bull/10 text-bull hover:bg-bull/20" : "bg-bear/10 text-bear hover:bg-bear/20"
             }`}
@@ -180,7 +181,7 @@ export function TopNav() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => navigate({ to: "/broker" })}>
-                <Plug className="h-4 w-4 mr-2" /> Broker / IBKR
+                <Plug className="h-4 w-4 mr-2" /> Broker / {brokerInfo().short}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => navigate({ to: "/settings" })}>
                 <SettingsIcon className="h-4 w-4 mr-2" /> Settings

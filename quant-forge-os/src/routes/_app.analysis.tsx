@@ -5,6 +5,7 @@ import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis
 import { getAccountSummary, getPositions, type Trade } from "@/lib/api/broker";
 import { getTradesAllTime } from "@/lib/trade-store";
 import { fmtMoney } from "@/lib/market-data";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/analysis")({
   head: () => ({ meta: [{ title: "Analysis · NOVA" }, { name: "description", content: "Where your profit and loss actually came from." }] }),
@@ -193,7 +194,7 @@ function Analysis() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <Tile label="Trades today" value={String(todayTrades.length)} tone="muted" sub={`${todayBuys} buys · ${todayTrades.length - todayBuys} sells`} />
           <Tile label="Realized P&L today" value={signed(todayRealized)} tone={todayRealized >= 0 ? "bull" : "bear"} sub="closed round-trips" />
-          <Tile label="Commissions today" value={`$${fmtMoney(todayCommission)}`} tone="muted" sub="deducted by IBKR" />
+          <Tile label="Commissions today" value={`$${fmtMoney(todayCommission)}`} tone="muted" sub={`deducted by ${brokerInfo().short}`} />
           <Tile label="Gross traded today" value={`$${fmtMoney(todayGross, 0)}`} tone="muted" sub="buy + sell value" />
         </div>
         {todayTrades.length === 0 ? (
@@ -235,7 +236,7 @@ function Analysis() {
         <Tile label={`Realized P&L (${sinceLabel})`} value={signed(realizedTotal)} tone={realizedTotal >= 0 ? "bull" : "bear"} sub={`${trips} trips · net ${signed(realizedTotal - commissions)} after comm.`} />
         <Tile label="Unrealized P&L (open)" value={signed(unrealized)} tone={unrealized >= 0 ? "bull" : "bear"} sub={`${positions.length} open position${positions.length === 1 ? "" : "s"}`} />
         <Tile label="Win rate" value={winRate != null ? `${winRate.toFixed(0)}%` : "—"} tone={winRate != null && winRate >= 50 ? "bull" : "muted"} sub={trips > 0 ? `${wins}W · ${losses}L` : "no closed trades yet"} />
-        <Tile label={`Commissions (${sinceLabel})`} value={`$${fmtMoney(commissions)}`} tone="muted" sub="deducted by IBKR" />
+        <Tile label={`Commissions (${sinceLabel})`} value={`$${fmtMoney(commissions)}`} tone="muted" sub={`deducted by ${brokerInfo().short}`} />
       </div>
 
       {isLoading ? (
@@ -243,7 +244,7 @@ function Analysis() {
       ) : isError ? (
         <div className="rounded-2xl glass p-10 text-center text-sm">
           <AlertTriangle className="h-6 w-6 text-warn mx-auto mb-3" />
-          <div className="font-semibold mb-1">Could not load executions from IBKR</div>
+          <div className="font-semibold mb-1">Could not load executions from {brokerInfo().short}</div>
           <div className="text-muted-foreground text-xs">{(error as Error)?.message}</div>
         </div>
       ) : (
@@ -330,7 +331,7 @@ function Analysis() {
           {/* ---- Open positions (unrealized) ---- */}
           <div className="rounded-2xl glass p-5">
             <div className="text-sm font-semibold mb-1">Open Positions — Unrealized P&L</div>
-            <p className="text-[11px] text-muted-foreground mb-3">Live mark-to-market from IBKR — this is what you'd realize if you closed now.</p>
+            <p className="text-[11px] text-muted-foreground mb-3">Live mark-to-market from {brokerInfo().short} — this is what you'd realize if you closed now.</p>
             {positions.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground text-sm">No open positions.</div>
             ) : (
@@ -359,7 +360,7 @@ function Analysis() {
 
           {/* ---- IBKR's own account number, for reference ---- */}
           <p className="text-[11px] text-muted-foreground">
-            IBKR account realized P&L (today, their number): <span className={`num ${(summary?.realizedPnl ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>{signed(summary?.realizedPnl ?? 0)}</span>.
+            {brokerInfo().short} account realized P&L (today, their number): <span className={`num ${(summary?.realizedPnl ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>{signed(summary?.realizedPnl ?? 0)}</span>.
             Positions opened before the 7-day window can't be matched to a cost basis here and are excluded from the round-trip numbers.
           </p>
         </>

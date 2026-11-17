@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2, UserPlus, KeyRound, Mail, ShieldCheck, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { brokerInfo } from "@/lib/broker";
 
 interface AdminUser {
   id: string;
@@ -216,7 +217,7 @@ export function AdminUsers({ adminEmail }: { adminEmail: string }) {
         </div>
       )}
       <div className="px-5 py-2 text-[10px] text-muted-foreground">
-        Passwords are stored encrypted by IBKR-grade auth (Supabase). This panel is visible only to the admin account and every action is verified with a one-time code sent by email.
+        Passwords are stored encrypted by {brokerInfo().short}-grade auth (Supabase). This panel is visible only to the admin account and every action is verified with a one-time code sent by email.
       </div>
 
       {/* OTP modal */}

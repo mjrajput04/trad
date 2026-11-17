@@ -8,6 +8,7 @@ import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { QuickTradeModal } from "@/components/QuickTradeModal";
 import { TradingViewChart } from "@/components/TradingViewChart";
 import { fmtCompact, fmtMoney } from "@/lib/market-data";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/stock/$symbol")({
   component: StockDetail,
@@ -70,7 +71,7 @@ function StockDetail() {
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> loading quote…
             </div>
           ) : isError ? (
-            <div className="text-xs text-warn">IBKR quote unavailable — log in to the gateway (Broker page)</div>
+            <div className="text-xs text-warn">{brokerInfo().short} quote unavailable — log in to the gateway (Broker page)</div>
           ) : null}
         </div>
       </div>
@@ -82,9 +83,9 @@ function StockDetail() {
         </div>
 
         <div className="space-y-4">
-          {/* Market data (live from IBKR) */}
+          {/* Market data (live from {brokerInfo().short}) */}
           <div className="rounded-2xl glass p-4">
-            <div className="text-sm font-semibold mb-2">Market Data <span className="text-[10px] text-muted-foreground font-normal">· live from IBKR</span></div>
+            <div className="text-sm font-semibold mb-2">Market Data <span className="text-[10px] text-muted-foreground font-normal">· live from {brokerInfo().short}</span></div>
             <div className="space-y-1.5 text-xs">
               {([
                 ["Open", q?.open ? `$${fmtMoney(q.open)}` : "—", ""],
@@ -130,7 +131,7 @@ function StockDetail() {
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-3">
-              ⚠ Orders are sent live to your IBKR account. Trading involves risk.
+              ⚠ Orders are sent live to your {brokerInfo().short} account. Trading involves risk.
             </p>
           </div>
         </div>

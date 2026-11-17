@@ -3,6 +3,7 @@ import { Search, X, Plus, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
+import { brokerInfo } from "@/lib/broker";
 
 interface SymbolSelectorProps {
   isOpen: boolean;
@@ -50,7 +51,7 @@ export function SymbolSelector({ isOpen, onClose, onSelect, selectedSymbols = []
   const remoteExtra = remote
     .filter((r) => !localSet.has(r.symbol))
     .slice(0, 10)
-    .map((r) => ({ symbol: r.symbol, name: r.name, sector: `IBKR Search${r.exchange ? ` · ${r.exchange}` : ""}` }));
+    .map((r) => ({ symbol: r.symbol, name: r.name, sector: `${brokerInfo().short} Search${r.exchange ? ` · ${r.exchange}` : ""}` }));
 
   const groupedBySection = [...filteredSymbols, ...remoteExtra].reduce((acc, symbol) => {
     if (!acc[symbol.sector]) acc[symbol.sector] = [];
@@ -65,7 +66,7 @@ export function SymbolSelector({ isOpen, onClose, onSelect, selectedSymbols = []
         <div className="flex items-center justify-between p-6 hairline-b">
           <div>
             <h2 className="text-lg font-semibold">Add Symbols</h2>
-            <p className="text-sm text-muted-foreground">Search any US stock — resolved live from IBKR</p>
+            <p className="text-sm text-muted-foreground">Search any US stock — resolved live from {brokerInfo().short}</p>
           </div>
           <button
             onClick={onClose}

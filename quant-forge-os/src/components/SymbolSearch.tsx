@@ -6,6 +6,7 @@ import { getQuotes, searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 import { fmtMoney } from "@/lib/market-data";
 import { Delta } from "./Delta";
+import { brokerInfo } from "@/lib/broker";
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -48,7 +49,7 @@ export function SymbolSearch() {
     ...remoteMatches
       .filter((r) => !localSymbols.has(r.symbol))
       .slice(0, 8)
-      .map((r) => ({ symbol: r.symbol, name: r.name, sector: r.exchange || "IBKR" })),
+      .map((r) => ({ symbol: r.symbol, name: r.name, sector: r.exchange || `${brokerInfo().short}` })),
   ];
 
   // Live quotes for the first visible rows
@@ -234,7 +235,7 @@ export function SymbolSearch() {
             ) : (
               <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
             )}
-            <div className="text-sm font-medium mb-1">{searching ? "Searching IBKR…" : "No symbols found"}</div>
+            <div className="text-sm font-medium mb-1">{searching ? `Searching ${brokerInfo().short}…` : "No symbols found"}</div>
             <div className="text-xs">Try searching for a different symbol or company name</div>
           </div>
         </div>

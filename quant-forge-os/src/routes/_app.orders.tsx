@@ -5,6 +5,7 @@ import { getOrders, cancelOrder } from "@/lib/api/broker";
 import { Check, Clock, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/orders")({
   head: () => ({ meta: [{ title: "Orders · NOVA" }] }),
@@ -46,7 +47,7 @@ function Orders() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Orders</h1>
-          <p className="text-sm text-muted-foreground">Live order book synced with IBKR Gateway.</p>
+          <p className="text-sm text-muted-foreground">Live order book synced with {brokerInfo().short} Gateway.</p>
         </div>
         <div className="text-xs text-muted-foreground">{allOrders.length} total orders</div>
       </div>

@@ -35,7 +35,7 @@ type BrokerSearch = {
 };
 
 export const Route = createFileRoute("/_app/broker")({
-  head: () => ({ meta: [{ title: "Broker · IBKR · NOVA" }] }),
+  head: () => ({ meta: [{ title: `Broker · ${brokerInfo().short} · NOVA` }] }),
   // Lets other pages (e.g. an alert's "Trade this") pre-fill the ticket.
   validateSearch: (s: Record<string, unknown>): BrokerSearch => {
     const num = (v: unknown) => (v == null || v === "" ? undefined : Number(v));
@@ -159,12 +159,12 @@ function Broker() {
       });
     },
     onSuccess: (result) => {
-      toast.success(`${side} ${qty} ${symbol} sent to IBKR — #${result.orderId} (${result.status})`);
+      toast.success(`${side} ${qty} ${symbol} sent to ${brokerInfo().short} — #${result.orderId} (${result.status})`);
       // The gateway can ACK an order and still silently drop it (dead bridge) —
       // confirm it actually exists in the real order book.
       verifyOrderLive(result.orderId).then((st) => {
-        if (st) toast.success(`✅ ${symbol} order IBKR par LIVE che (${st})`, { duration: 8000 });
-        else toast.error(`⚠️ ${symbol} order IBKR order book ma NATHI dekhato — Orders page check karo, jarur pade FARI muko!`, { duration: 20000 });
+        if (st) toast.success(`✅ ${symbol} order ${brokerInfo().short} par LIVE che (${st})`, { duration: 8000 });
+        else toast.error(`⚠️ ${symbol} order ${brokerInfo().short} order book ma NATHI dekhato — Orders page check karo, jarur pade FARI muko!`, { duration: 20000 });
       });
       qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
       qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
@@ -226,10 +226,10 @@ function Broker() {
               <div className="text-sm font-medium">{isPaper ? "Paper Account" : "Live Trading"}</div>
               <div className="text-[11px] text-muted-foreground">
                 {!paperConfigured
-                  ? "Real money — orders execute on IBKR. (No paper account linked.)"
+                  ? `Real money — orders execute on ${brokerInfo().short}. (No paper account linked.)`
                   : isPaper
                     ? "Uses your paper account — the gateway must be logged into it"
-                    : "Real money — orders execute on IBKR"}
+                    : `Real money — orders execute on ${brokerInfo().short}`}
               </div>
             </div>
             {paperConfigured ? (
@@ -243,7 +243,7 @@ function Broker() {
             )}
           </div>
 
-          {/* How you connect depends on the broker: IBKR hands you off to its own
+          {/* How you connect depends on the broker: {brokerInfo().short} hands you off to its own
               gateway page, E*TRADE runs an OAuth dance that stays on this page. */}
           {!connected && (
             activeBroker() === "etrade" ? (
@@ -305,7 +305,7 @@ function Broker() {
         {fromAlert && (
           <div className="mb-3 rounded-lg bg-info/10 border border-info/20 px-3 py-2 text-[11px] text-info flex items-center gap-2">
             <Zap className="h-3.5 w-3.5 shrink-0" />
-            <span>Pre-filled from a TradeScope alert — review the levels, then confirm to send to IBKR.</span>
+            <span>Pre-filled from a TradeScope alert — review the levels, then confirm to send to {brokerInfo().short}.</span>
           </div>
         )}
 
@@ -424,7 +424,7 @@ function Broker() {
               <h3 className="text-base font-semibold">Confirm order</h3>
             </div>
             <p className="text-xs text-muted-foreground mb-4">
-              Sending to IBKR {isPaper ? "paper" : "live"} account <span className="num">{currentAccount}</span>.
+              Sending to {brokerInfo().short} {isPaper ? "paper" : "live"} account <span className="num">{currentAccount}</span>.
             </p>
 
             <div className="rounded-xl hairline bg-surface-1 p-4 space-y-2">

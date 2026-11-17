@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { searchSymbols } from "@/lib/api/broker";
 import { SYMBOL_UNIVERSE } from "@/lib/symbols";
 import { Loader2 } from "lucide-react";
+import { brokerInfo } from "@/lib/broker";
 
 function useDebounced<T>(value: T, delay: number): T {
   const [d, setD] = useState(value);
@@ -53,7 +54,7 @@ export function SymbolPicker({
     ...remote
       .filter((r) => !seen.has(r.symbol))
       .slice(0, 8)
-      .map((r) => ({ symbol: r.symbol, name: r.name, tag: r.exchange || "IBKR" })),
+      .map((r) => ({ symbol: r.symbol, name: r.name, tag: r.exchange || `${brokerInfo().short}` })),
   ].slice(0, 12);
 
   useEffect(() => {
@@ -107,10 +108,10 @@ export function SymbolPicker({
             <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
               {isFetching ? (
                 <>
-                  <Loader2 className="h-3 w-3 animate-spin" /> Searching IBKR…
+                  <Loader2 className="h-3 w-3 animate-spin" /> Searching {brokerInfo().short}…
                 </>
               ) : (
-                "No matching stock in IBKR"
+                `No matching stock in ${brokerInfo().short}`
               )}
             </div>
           ) : (

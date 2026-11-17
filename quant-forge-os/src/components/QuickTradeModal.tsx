@@ -5,6 +5,7 @@ import { cancelWorkingOrders, getAccountSummary, getQuotes, placeOrder, verifyOr
 import { useTrading } from "@/lib/trading-context";
 import { fmtMoney } from "@/lib/market-data";
 import { toast } from "sonner";
+import { brokerInfo } from "@/lib/broker";
 
 export interface QuickTradeDefaults {
   /** Suggested entry/limit price (e.g. the alert's entry). */
@@ -131,15 +132,15 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
       });
     },
     onSuccess: (result) => {
-      toast.success(`${side} ${qty} ${symbol} sent to IBKR — #${result.orderId} (${result.status})`);
+      toast.success(`${side} ${qty} ${symbol} sent to ${brokerInfo().short} — #${result.orderId} (${result.status})`);
       // The gateway has ACKed and still dropped an order before (dead bridge,
       // live money) — always confirm it exists in the real order book.
       verifyOrderLive(result.orderId).then((st) => {
         if (st) {
-          toast.success(`✅ ${symbol} order IBKR par LIVE che (${st})`, { duration: 8000 });
+          toast.success(`✅ ${symbol} order ${brokerInfo().short} par LIVE che (${st})`, { duration: 8000 });
         } else {
           toast.error(
-            `⚠️ ${symbol} order IBKR na order book ma NATHI dekhato! Orders page check karo — jarur pade FARI muko.`,
+            `⚠️ ${symbol} order ${brokerInfo().short} na order book ma NATHI dekhato! Orders page check karo — jarur pade FARI muko.`,
             { duration: 20000 }
           );
         }
@@ -177,7 +178,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
           </button>
         </div>
         <p className="text-[11px] text-muted-foreground mb-3">
-          IBKR {isPaper ? "paper" : "live"} account <span className="num">{currentAccount}</span>
+          {brokerInfo().short} {isPaper ? "paper" : "live"} account <span className="num">{currentAccount}</span>
           {longQty > 0 && <> · you hold <span className="num font-semibold">{longQty}</span> shares</>}
           {shortQty > 0 && <> · you are short <span className="num font-semibold">{shortQty}</span> shares</>}
         </p>
@@ -220,7 +221,7 @@ export function QuickTradeModal({ symbol, side: initialSide, ownedQty = 0, defau
             <input type="checkbox" checked={tif === "GTC"} onChange={(e) => setTif(e.target.checked ? "GTC" : "DAY")} />
             <span>
               <span className="font-semibold">GTC — order expire NAHI thay</span>
-              <span className="text-muted-foreground"> — fill na thay tya sudhi roj IBKR par live rahe (logout/app bandh thi farak nathi padto). Off karo to aaje market close par order mari jase.</span>
+              <span className="text-muted-foreground"> — fill na thay tya sudhi roj {brokerInfo().short} par live rahe (logout/app bandh thi farak nathi padto). Off karo to aaje market close par order mari jase.</span>
             </span>
           </label>
         )}

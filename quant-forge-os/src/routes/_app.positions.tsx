@@ -7,6 +7,7 @@ import { AlertTriangle, Loader2, X, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { toast } from "sonner";
+import { brokerInfo } from "@/lib/broker";
 
 export const Route = createFileRoute("/_app/positions")({
   head: () => ({ meta: [{ title: "Positions · NOVA" }] }),
@@ -27,7 +28,7 @@ function Positions() {
   const close = useMutation({
     mutationFn: (p: Position) => closePosition(p.conid, p.quantity),
     onSuccess: (result) => {
-      toast.success(`Close order sent to IBKR — #${result.orderId} (${result.status})`);
+      toast.success(`Close order sent to ${brokerInfo().short} — #${result.orderId} (${result.status})`);
       qc.invalidateQueries({ queryKey: ["ibkr-positions"] });
       qc.invalidateQueries({ queryKey: ["ibkr-orders"] });
       qc.invalidateQueries({ queryKey: ["ibkr-summary"] });
@@ -37,7 +38,7 @@ function Positions() {
 
   const confirmClose = (p: Position) => {
     const side = p.quantity > 0 ? "SELL" : "BUY";
-    if (window.confirm(`Close ${p.symbol}: ${side} ${Math.abs(p.quantity)} @ market — send to IBKR?`)) {
+    if (window.confirm(`Close ${p.symbol}: ${side} ${Math.abs(p.quantity)} @ market — send to ${brokerInfo().short}?`)) {
       close.mutate(p);
     }
   };
@@ -49,7 +50,7 @@ function Positions() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Open Positions</h1>
-          <p className="text-sm text-muted-foreground">Realtime mark-to-market P&L synced from IBKR.</p>
+          <p className="text-sm text-muted-foreground">Realtime mark-to-market P&L synced from {brokerInfo().short}.</p>
         </div>
         <div className="rounded-xl glass px-4 py-2.5">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Unrealized</div>
@@ -64,7 +65,7 @@ function Positions() {
       ) : isError ? (
         <div className="rounded-2xl glass p-10 text-center text-sm">
           <AlertTriangle className="h-6 w-6 text-warn mx-auto mb-3" />
-          <div className="font-semibold mb-1">Could not load positions from IBKR</div>
+          <div className="font-semibold mb-1">Could not load positions from {brokerInfo().short}</div>
           <div className="text-muted-foreground text-xs">{(error as Error)?.message}</div>
         </div>
       ) : positions.length === 0 ? (
