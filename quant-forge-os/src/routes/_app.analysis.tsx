@@ -359,9 +359,13 @@ function Analysis() {
             )}
           </div>
 
-          {/* ---- IBKR's own account number, for reference ---- */}
+          {/* ---- The broker's own number, for reference ---- */}
           <p className="text-[11px] text-muted-foreground">
-            {brokerInfo().short} account realized P&L (today, their number): <span className={`num ${(summary?.realizedPnl ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>{signed(summary?.realizedPnl ?? 0)}</span>.
+            {brokerInfo().reportsRealizedPnl && (
+              <>
+                {brokerInfo().short} account realized P&L (today, their number): <span className={`num ${(summary?.realizedPnl ?? 0) >= 0 ? "text-bull" : "text-bear"}`}>{signed(summary?.realizedPnl ?? 0)}</span>.{" "}
+              </>
+            )}
             Positions opened before the 7-day window can't be matched to a cost basis here and are excluded from the round-trip numbers.
           </p>
         </>

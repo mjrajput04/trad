@@ -20,6 +20,13 @@ export interface BrokerInfo {
   blurb: string;
   /** How a session is kept: shapes what the Broker page tells them to do. */
   session: string;
+  /**
+   * Whether the broker publishes its own realized P&L for the day. IBKR does,
+   * and it is worth showing next to ours as a check. E*TRADE's balance carries
+   * no such field at all — printing "their number: $0.00" claimed E*TRADE had
+   * answered zero when it had not answered.
+   */
+  reportsRealizedPnl: boolean;
 }
 
 export const BROKERS: readonly BrokerInfo[] = [
@@ -29,6 +36,7 @@ export const BROKERS: readonly BrokerInfo[] = [
     short: "IBKR",
     blurb: "US stocks, options and F&O through the Client Portal Gateway.",
     session: "Sign in at the gateway once a day with your phone's two-factor.",
+    reportsRealizedPnl: true,
   },
   {
     id: "etrade",
@@ -36,6 +44,7 @@ export const BROKERS: readonly BrokerInfo[] = [
     short: "E*TRADE",
     blurb: "US stocks and options over E*TRADE's OAuth API.",
     session: "Authorise once a day — the token expires at midnight ET.",
+    reportsRealizedPnl: false,
   },
 ] as const;
 

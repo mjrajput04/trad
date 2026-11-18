@@ -809,20 +809,51 @@ export interface Trade {
   orderRef: string;
 }
 
+/**
+ * What a fill actually cost, when E*TRADE says it cost nothing.
+ *
+ * E*TRADE charges no commission on US stocks, so `commission` comes back 0 —
+ * and so does `brokerage.fee`. The trade is not free though: the regulatory
+ * fees, charged on the sell side, are taken straight out of `netAmount` and
+ * reported in no field of their own. A 100-share NVDA sale at $152.24 credits
+ * $15,223.68 against a gross of $15,224.00 — 32 cents that the Commissions
+ * tile showed as $0.00 and that "net after comm." therefore never deducted.
+ *
+ * So read the cost back out of the cash: a sale credits gross less fees, a
+ * purchase debits gross plus fees, and the gap is the cost either way. `price`
+ * is an average rounded for display, so the figure carries a cent or two of
+ * noise; anything far outside a plausible fee is a mismatched transaction type
+ * rather than a fee, and counts as nothing.
+ */
+function derivedFee(quantity: number, price: number, netAmount: number): number {
+  const gross = quantity * price;
+  if (!gross || !netAmount) return 0;
+  const fee = Math.abs(Math.abs(netAmount) - gross);
+  if (fee <= 0 || fee > gross * 0.001) return 0;
+  return Math.round(fee * 100) / 100;
+}
+
 /** Executed trades for the last few days. */
 export async function getTrades(days = 6): Promise<Trade[]> {
   const raw = await api<any[]>(`/api/accounts/${requireAccount()}/transactions?days=${days}`);
-  return (raw ?? []).map((t) => ({
-    executionId: String(t.transactionId ?? ""),
-    symbol: String(t.symbol ?? "").toUpperCase(),
-    side: num(t.quantity) >= 0 ? ("BUY" as const) : ("SELL" as const),
-    quantity: Math.abs(num(t.quantity)),
-    price: num(t.price),
-    time: Number(t.transactionDate) || 0,
-    commission: num(t.commission),
-    netAmount: num(t.netAmount),
-    orderRef: String(t.orderNo ?? ""),
-  }));
+  return (raw ?? []).map((t) => {
+    const quantity = Math.abs(num(t.quantity));
+    const price = num(t.price);
+    const netAmount = num(t.netAmount);
+    return {
+      executionId: String(t.transactionId ?? ""),
+      symbol: String(t.symbol ?? "").toUpperCase(),
+      side: num(t.quantity) >= 0 ? ("BUY" as const) : ("SELL" as const),
+      quantity,
+      price,
+      time: Number(t.transactionDate) || 0,
+      // Options do carry a real per-contract commission, and E*TRADE reports
+      // that one properly — only fall back when it says there was none.
+      commission: num(t.commission) || derivedFee(quantity, price, netAmount),
+      netAmount,
+      orderRef: String(t.orderNo ?? ""),
+    };
+  });
 }
 
 export async function cancelOrder(orderId: string) {
