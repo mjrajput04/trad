@@ -478,6 +478,28 @@ export async function invalidatePositionsCache() {
   /* no-op — kept so call sites compile unchanged */
 }
 
+/**
+ * Signed quantity the account currently holds, for deciding whether an order
+ * opens or closes. Matched by conid for an option (one contract among many on
+ * the same underlying) and by symbol for a stock.
+ *
+ * A failure here must not block trading, so it answers 0 — the order then goes
+ * as an opening one, which is what it was before any of this existed.
+ */
+async function heldQuantity(symbol: string | null, conid: number | null): Promise<number> {
+  try {
+    const positions = await getPositions();
+    const hit = conid
+      ? positions.find((p) => p.conid === conid)
+      : symbol
+        ? positions.find((p) => p.symbol?.toUpperCase() === symbol.toUpperCase())
+        : undefined;
+    return hit ? hit.quantity : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------------------
@@ -583,6 +605,21 @@ export async function placeOrder(params: PlaceOrderParams) {
     marketSession: params.outsideRth ? "EXTENDED" : "REGULAR",
   };
 
+  // E*TRADE does not take a bare BUY/SELL: it wants to know whether the order
+  // OPENS or CLOSES, and it refuses a closing order for something the account
+  // does not hold — "We did not find this security in your account for the
+  // closing order as placed". Selling a stock you do not own is a short, and
+  // has to say so. IBKR infers all of this from the signed position, which is
+  // why the app above never had to care.
+  const held = await heldQuantity(isOption ? null : (spec.symbol as string), params.conid ?? null);
+  const closing = held !== 0 && Math.sign(held) !== (side === "BUY" ? 1 : -1);
+  if (closing && quantity > Math.abs(held)) {
+    throw new Error(
+      `You hold ${Math.abs(held)} ${spec.symbol}; ${quantity} would close that and open the other way. ` +
+        `E*TRADE cannot do both in one order — close first, then open.`,
+    );
+  }
+
   if (isOption) {
     Object.assign(spec, {
       underlying: ref.underlying,
@@ -591,11 +628,10 @@ export async function placeOrder(params: PlaceOrderParams) {
       expiryMonth: ref.month,
       expiryDay: ref.day,
       strikePrice: ref.strike,
-      // Options open/close semantics: the app only ever buys to open and sells to close.
-      action: side === "BUY" ? "BUY_OPEN" : "SELL_CLOSE",
+      action: side === "BUY" ? (closing ? "BUY_CLOSE" : "BUY_OPEN") : closing ? "SELL_CLOSE" : "SELL_OPEN",
     });
   } else {
-    spec.action = side;
+    spec.action = side === "BUY" ? (closing ? "BUY_TO_COVER" : "BUY") : closing ? "SELL" : "SELL_SHORT";
   }
 
   if (orderType === "LMT") spec.limitPrice = price;
