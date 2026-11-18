@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { brokerInfo } from "@/lib/broker";
 import { activeBroker } from "@/lib/broker";
+import { BrokerSwitch } from "@/components/BrokerSwitch";
 
 // Single-row navigation used by every account except the control one, which
 // keeps the original sidebar terminal. Logo, every section and the account
@@ -140,6 +141,8 @@ export function TopNav() {
           >
             {searchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
           </button>
+
+          <BrokerSwitch />
 
           <button
             onClick={() => (ibkrOk ? navigate({ to: "/broker" }) : reviveOrLogin())}

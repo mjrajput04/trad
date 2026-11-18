@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { brokerInfo } from "@/lib/broker";
 import { activeBroker } from "@/lib/broker";
+import { BrokerSwitch } from "@/components/BrokerSwitch";
 
 export function Topbar() {
   const [now, setNow] = useState<Date | null>(null);
@@ -119,6 +120,8 @@ export function Topbar() {
             PAPER
           </div>
         )}
+          <BrokerSwitch />
+
         <button
           onClick={() => {
             if (ibkrOk) navigate({ to: "/broker" });
