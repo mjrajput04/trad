@@ -20,6 +20,7 @@
 //     (recoverable — that is what tickle() does here).
 
 import { supabase } from "@/integrations/supabase/client";
+import { isRuntimeTradingAllowed, TRADING_DISABLED_MESSAGE } from "@/lib/trade-guard";
 
 const PROXY: string = (import.meta.env.VITE_BROKER_API_URL ?? "").replace(/\/$/, "");
 
@@ -483,10 +484,11 @@ export async function invalidatePositionsCache() {
  * opens or closes. Matched by conid for an option (one contract among many on
  * the same underlying) and by symbol for a stock.
  *
- * A failure here must not block trading, so it answers 0 — the order then goes
- * as an opening one, which is what it was before any of this existed.
+ * Answers null when the portfolio could not be read at all, which is NOT the
+ * same as holding nothing: an opening order may safely assume zero, but a
+ * closing order must not refuse to run just because one request failed.
  */
-async function heldQuantity(symbol: string | null, conid: number | null): Promise<number> {
+async function heldQuantity(symbol: string | null, conid: number | null): Promise<number | null> {
   try {
     const positions = await getPositions();
     const hit = conid
@@ -496,7 +498,7 @@ async function heldQuantity(symbol: string | null, conid: number | null): Promis
         : undefined;
     return hit ? hit.quantity : 0;
   } catch {
-    return 0;
+    return null;
   }
 }
 
@@ -508,7 +510,14 @@ export type OrderStatus = "Working" | "Filled" | "Canceled" | "Rejected";
 
 function mapStatus(s: string): OrderStatus {
   const v = String(s ?? "").toUpperCase();
-  if (["OPEN", "PARTIAL", "CANCEL_REQUESTED", "OPEN_ORDER"].includes(v)) return "Working";
+  // INDIVIDUAL_FILLS is an order that has filled in pieces and is still live for
+  // the rest. It used to fall through to "Rejected", which is both wrong on the
+  // Orders page and dangerous on the way out: closePosition cancels working
+  // orders first, so a half-filled protective stop was left standing and could
+  // trigger after the position was already flat — opening a fresh one the other
+  // way. Anything not clearly finished counts as working.
+  if (["OPEN", "PARTIAL", "INDIVIDUAL_FILLS", "CANCEL_REQUESTED", "OPEN_ORDER"].includes(v))
+    return "Working";
   if (v === "EXECUTED") return "Filled";
   if (["CANCELLED", "CANCELED", "EXPIRED"].includes(v)) return "Canceled";
   return "Rejected";
@@ -592,6 +601,7 @@ export async function placeOrder(params: PlaceOrderParams) {
     throw new Error("Market orders are not accepted outside regular hours — use a limit order");
   }
 
+  if (!isRuntimeTradingAllowed()) throw new Error(TRADING_DISABLED_MESSAGE);
   const account = requireAccount();
   const ref = params.conid ? refFor(params.conid) : null;
   const isOption = ref?.kind === "OPT";
@@ -611,7 +621,9 @@ export async function placeOrder(params: PlaceOrderParams) {
   // closing order as placed". Selling a stock you do not own is a short, and
   // has to say so. IBKR infers all of this from the signed position, which is
   // why the app above never had to care.
-  const held = await heldQuantity(isOption ? null : (spec.symbol as string), params.conid ?? null);
+  // Unknown counts as zero here: a failed lookup must not block an entry, and
+  // an opening order is what this was before any of it existed.
+  const held = (await heldQuantity(isOption ? null : (spec.symbol as string), params.conid ?? null)) ?? 0;
   const closing = held !== 0 && Math.sign(held) !== (side === "BUY" ? 1 : -1);
   if (closing && quantity > Math.abs(held)) {
     throw new Error(
@@ -723,26 +735,46 @@ export async function cancelWorkingOrders(filter: { symbol?: string; conid?: num
 
 export async function closePosition(conid: number, quantity: number) {
   if (!quantity) throw new Error("Nothing to close");
+  if (!isRuntimeTradingAllowed()) throw new Error(TRADING_DISABLED_MESSAGE);
   const account = requireAccount();
   const ref = refFor(conid);
   if (!ref) throw new Error("Unknown contract — refresh positions and retry");
 
   // Kill any working orders on this contract first (see cancelWorkingOrders).
+  // Before measuring the position rather than after: a protective stop that
+  // fills in between would leave this order larger than what is left to close.
   await cancelWorkingOrders({ conid }).catch(() => {});
 
   const isOption = ref.kind === "OPT";
+  const name = isOption ? ref.underlying : ref.symbol;
+
+  // Size and direction come from what the account holds NOW, not from the row
+  // that was on screen when the button was pressed. E*TRADE refuses a closing
+  // order bigger than the position outright — BUY_TO_COVER for 150 against a
+  // 100-share short comes back as an HTML error page, so nothing closes and
+  // the trader learns nothing — and the stop just cancelled above may already
+  // have covered part of it. IBKR never needed this because it infers the
+  // closing side from the signed position itself.
+  //
+  // Never more than was asked for, and a failed lookup is not a reason to
+  // refuse a close: unknown falls back to the caller's own figure.
+  const live = await heldQuantity(null, conid);
+  if (live === 0) throw new Error(`${name} is already flat — nothing left to close.`);
+  const signed = live ?? quantity;
+  const size = Math.min(Math.abs(quantity), Math.abs(signed));
+
   const spec: Record<string, unknown> = {
-    symbol: isOption ? ref.underlying : ref.symbol,
+    symbol: name,
     securityType: isOption ? "OPTN" : "EQ",
-    quantity: Math.abs(quantity),
+    quantity: size,
     priceType: "MARKET",
     orderTerm: "GOOD_FOR_DAY",
     marketSession: "REGULAR",
     action: isOption
-      ? quantity > 0
+      ? signed > 0
         ? "SELL_CLOSE"
         : "BUY_CLOSE"
-      : quantity > 0
+      : signed > 0
         ? "SELL"
         : "BUY_TO_COVER",
   };
