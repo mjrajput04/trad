@@ -7,6 +7,7 @@ import { TopNav } from "@/components/TopNav";
 import { Topbar } from "@/components/Topbar";
 import { isControlAccount, setRuntimeTradingAllowed, useTradingAllowed } from "@/lib/app-flags";
 import { Ticker } from "@/components/Ticker";
+import { SessionBanner } from "@/components/SessionBanner";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/_app")({
@@ -84,6 +85,7 @@ function AppLayout() {
         <MaintenanceGate />
         <TopNav />
         <Ticker />
+        <SessionBanner />
         <main className="flex-1 min-w-0 overflow-x-hidden">
           <RouteErrorBoundary key={pathname}>
             <Outlet />
@@ -100,6 +102,7 @@ function AppLayout() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar />
         <Ticker />
+        <SessionBanner />
         {/* pb on mobile keeps the floating menu button from covering content */}
         <main className="flex-1 min-w-0 overflow-x-hidden pb-24 md:pb-0">
           <RouteErrorBoundary key={pathname}>
