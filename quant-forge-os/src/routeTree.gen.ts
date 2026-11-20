@@ -22,6 +22,7 @@ import { Route as AppOptionsRouteImport } from './routes/_app.options'
 import { Route as AppHistoryRouteImport } from './routes/_app.history'
 import { Route as AppFnoAlertsRouteImport } from './routes/_app.fno-alerts'
 import { Route as AppEngineRouteImport } from './routes/_app.engine'
+import { Route as AppCombinedRouteImport } from './routes/_app.combined'
 import { Route as AppBrokerRouteImport } from './routes/_app.broker'
 import { Route as AppAnalysisRouteImport } from './routes/_app.analysis'
 import { Route as AppAlertsRouteImport } from './routes/_app.alerts'
@@ -91,6 +92,11 @@ const AppEngineRoute = AppEngineRouteImport.update({
   path: '/engine',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCombinedRoute = AppCombinedRouteImport.update({
+  id: '/combined',
+  path: '/combined',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrokerRoute = AppBrokerRouteImport.update({
   id: '/broker',
   path: '/broker',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AppAlertsRoute
   '/analysis': typeof AppAnalysisRoute
   '/broker': typeof AppBrokerRoute
+  '/combined': typeof AppCombinedRoute
   '/engine': typeof AppEngineRoute
   '/fno-alerts': typeof AppFnoAlertsRoute
   '/history': typeof AppHistoryRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/alerts': typeof AppAlertsRoute
   '/analysis': typeof AppAnalysisRoute
   '/broker': typeof AppBrokerRoute
+  '/combined': typeof AppCombinedRoute
   '/engine': typeof AppEngineRoute
   '/fno-alerts': typeof AppFnoAlertsRoute
   '/history': typeof AppHistoryRoute
@@ -155,6 +163,7 @@ export interface FileRoutesById {
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/analysis': typeof AppAnalysisRoute
   '/_app/broker': typeof AppBrokerRoute
+  '/_app/combined': typeof AppCombinedRoute
   '/_app/engine': typeof AppEngineRoute
   '/_app/fno-alerts': typeof AppFnoAlertsRoute
   '/_app/history': typeof AppHistoryRoute
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/analysis'
     | '/broker'
+    | '/combined'
     | '/engine'
     | '/fno-alerts'
     | '/history'
@@ -193,6 +203,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/analysis'
     | '/broker'
+    | '/combined'
     | '/engine'
     | '/fno-alerts'
     | '/history'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/_app/alerts'
     | '/_app/analysis'
     | '/_app/broker'
+    | '/_app/combined'
     | '/_app/engine'
     | '/_app/fno-alerts'
     | '/_app/history'
@@ -324,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEngineRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/combined': {
+      id: '/_app/combined'
+      path: '/combined'
+      fullPath: '/combined'
+      preLoaderRoute: typeof AppCombinedRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/broker': {
       id: '/_app/broker'
       path: '/broker'
@@ -359,6 +378,7 @@ interface AppRouteChildren {
   AppAlertsRoute: typeof AppAlertsRoute
   AppAnalysisRoute: typeof AppAnalysisRoute
   AppBrokerRoute: typeof AppBrokerRoute
+  AppCombinedRoute: typeof AppCombinedRoute
   AppEngineRoute: typeof AppEngineRoute
   AppFnoAlertsRoute: typeof AppFnoAlertsRoute
   AppHistoryRoute: typeof AppHistoryRoute
@@ -377,6 +397,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAlertsRoute: AppAlertsRoute,
   AppAnalysisRoute: AppAnalysisRoute,
   AppBrokerRoute: AppBrokerRoute,
+  AppCombinedRoute: AppCombinedRoute,
   AppEngineRoute: AppEngineRoute,
   AppFnoAlertsRoute: AppFnoAlertsRoute,
   AppHistoryRoute: AppHistoryRoute,

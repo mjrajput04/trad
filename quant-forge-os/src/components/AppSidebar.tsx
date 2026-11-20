@@ -17,8 +17,7 @@ import {
   Menu,
   X,
   PanelLeftClose,
-  ChevronRight,
-} from "lucide-react";
+  ChevronRight, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { brokerInfo } from "@/lib/broker";
 
@@ -33,6 +32,7 @@ const NAV = [
   { to: "/orders", label: "Orders", icon: ListOrdered },
   { to: "/history", label: "History", icon: History },
   { to: "/analysis", label: "Analysis", icon: BarChart3 },
+  { to: "/combined", label: "Combined P&L", icon: Scale },
 ] as const;
 
 const SYS = [

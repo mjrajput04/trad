@@ -833,27 +833,79 @@ function derivedFee(quantity: number, price: number, netAmount: number): number 
   return Math.round(fee * 100) / 100;
 }
 
-/** Executed trades for the last few days. */
-export async function getTrades(days = 6): Promise<Trade[]> {
-  const raw = await api<any[]>(`/api/accounts/${requireAccount()}/transactions?days=${days}`);
-  return (raw ?? []).map((t) => {
+const feeKey = (symbol: string, side: string, quantity: number, price: number): string =>
+  `${symbol.toUpperCase()}|${side}|${quantity}|${price.toFixed(4)}`;
+
+/**
+ * Regulatory fees per execution, read out of the cash each transaction moved.
+ *
+ * The order book does not carry them, and this feed is not stable enough to
+ * build a P&L on, but a fee that has posted is a fact and worth keeping.
+ * Anything that has not posted yet reads as zero, which costs a few cents of
+ * accuracy on a cost column and never moves the P&L around.
+ */
+async function transactionFees(days: number): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const raw = await api<any[]>(
+    `/api/accounts/${requireAccount()}/transactions?days=${Math.max(days, 10)}`,
+  );
+  for (const t of raw ?? []) {
+    const symbol = String(t.symbol ?? "").toUpperCase();
     const quantity = Math.abs(num(t.quantity));
+    if (!symbol || !quantity) continue; // cash, journals, adjustments — not trades
     const price = num(t.price);
-    const netAmount = num(t.netAmount);
-    return {
-      executionId: String(t.transactionId ?? ""),
-      symbol: String(t.symbol ?? "").toUpperCase(),
-      side: num(t.quantity) >= 0 ? ("BUY" as const) : ("SELL" as const),
-      quantity,
-      price,
-      time: Number(t.transactionDate) || 0,
-      // Options do carry a real per-contract commission, and E*TRADE reports
-      // that one properly — only fall back when it says there was none.
-      commission: num(t.commission) || derivedFee(quantity, price, netAmount),
-      netAmount,
-      orderRef: String(t.orderNo ?? ""),
-    };
-  });
+    const side = num(t.quantity) >= 0 ? "BUY" : "SELL";
+    // Options carry a real per-contract commission and E*TRADE reports that one
+    // properly; for stocks the only cost is the fee inside netAmount.
+    const fee = num(t.commission) || derivedFee(quantity, price, num(t.netAmount));
+    if (fee > 0) out.set(feeKey(symbol, side, quantity, price), fee);
+  }
+  return out;
+}
+
+/**
+ * Executed trades.
+ *
+ * NOT from the transactions endpoint, which is what this read until now.
+ * E*TRADE rewrites that feed as the day settles: rows appear, get consolidated
+ * into other rows, and disappear. Fifteen minutes apart the same account
+ * answered with twenty rows and then fourteen, seven executions that had been
+ * there simply gone — three TTWO buys among them, so TTWO was left holding a
+ * sale of 287 shares it had never bought. Every figure on Analysis is computed
+ * from this list, which is why it came out different on every poll and why no
+ * round trip balanced.
+ *
+ * The order book does not do that. An order keeps its id, its filled quantity
+ * and its average execution price, and nothing rewrites it afterwards. Rebuilt
+ * from filled orders, this account closes flat on all four symbols it traded
+ * and totals +2,018.80, against +2,011.55 of cash actually moved — the
+ * difference being exactly the $7.25 of regulatory fees on $345k of sales.
+ */
+export async function getTrades(days = 6): Promise<Trade[]> {
+  const [orders, fees] = await Promise.all([
+    getOrders(),
+    transactionFees(days).catch(() => new Map<string, number>()),
+  ]);
+  const cutoff = Date.now() - days * 86_400_000;
+
+  return orders
+    // Filled quantity, not status. An order can be cancelled or expire holding
+    // a real partial fill — 589 shares of SH were asked for, 300 traded, and
+    // then the order expired — and those 300 shares are a trade like any other.
+    // Reading the status instead of the quantity lost them.
+    .filter((o) => o.filled > 0 && o.avgPrice > 0 && o.timeMs >= cutoff)
+    .map((o) => ({
+      executionId: `etord-${o.orderId}`,
+      symbol: o.symbol,
+      side: o.side as Trade["side"],
+      quantity: o.filled,
+      price: o.avgPrice,
+      time: o.timeMs,
+      commission: fees.get(feeKey(o.symbol, o.side, o.filled, o.avgPrice)) ?? 0,
+      netAmount: o.avgPrice * o.filled,
+      orderRef: String(o.orderId),
+    }))
+    .sort((a, b) => b.time - a.time);
 }
 
 export async function cancelOrder(orderId: string) {

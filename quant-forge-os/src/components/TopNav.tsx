@@ -5,8 +5,7 @@ import { toast } from "sonner";
 import {
   BellRing, Sparkles, Layers, ListOrdered, Wallet, Eye, Coins,
   BarChart3, History, Radar, Plug, Settings as SettingsIcon,
-  TrendingUp, ChevronDown, Loader2, LogOut, Sun, Moon, Lock, Search, X,
-} from "lucide-react";
+  TrendingUp, ChevronDown, Loader2, LogOut, Sun, Moon, Lock, Search, X, Scale } from "lucide-react";
 import { SymbolSearch } from "./SymbolSearch";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme";
@@ -34,6 +33,7 @@ const NAV = [
   { to: "/watchlist", label: "Watchlist", icon: Eye },
   { to: "/options", label: "Options", icon: Coins },
   { to: "/analysis", label: "Analysis", icon: BarChart3 },
+  { to: "/combined", label: "Combined", icon: Scale },
   { to: "/history", label: "History", icon: History },
   { to: "/scanner", label: "Scanner", icon: Radar },
 ] as const;
