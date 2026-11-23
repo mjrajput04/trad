@@ -9,8 +9,20 @@ const GATEWAY_URL: string =
   import.meta.env.VITE_IBKR_GATEWAY_URL ?? "https://backend.nassphx.com";
 const BASE = import.meta.env.DEV ? "/ibkr" : `${GATEWAY_URL}/v1/api`;
 
-/** Where the user logs into the IBKR gateway (opens in a new tab). */
-export const GATEWAY_LOGIN_URL = GATEWAY_URL;
+/**
+ * Where the user logs into the IBKR gateway (opens in a new tab).
+ *
+ * The login path, not the bare host. The host answers with a 302 to exactly
+ * this path, so following it costs a round trip and lands in the same place —
+ * but the page it lands on builds its form in JavaScript and pulls that
+ * JavaScript from a RELATIVE src, `lib/xyz.bundle.min.js`. Served from
+ * /sso/Login that resolves to /sso/lib/… and returns the bundle; resolved
+ * against the host root it becomes /lib/… , which the gateway answers with a
+ * redirect. A login page that loaded its stylesheet and not its bundle renders
+ * the shell with no form on it at all, which is a page that cannot be used and
+ * does not say so. Naming the path leaves nothing to resolve.
+ */
+export const GATEWAY_LOGIN_URL = `${GATEWAY_URL}/sso/Login`;
 
 // The account this instance trades. Pinned by VITE_IBKR_ACCOUNT_ID when set
 // (the owner's build); otherwise auto-detected from /iserver/accounts, i.e.
