@@ -19,7 +19,7 @@ import {
   PanelLeftClose,
   ChevronRight, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { brokerInfo } from "@/lib/broker";
+import { brokerInfo, onBrokerChange } from "@/lib/broker";
 
 const NAV = [
   { to: "/alerts", label: "AI Stock Alerts", icon: BellRing },
@@ -35,10 +35,23 @@ const NAV = [
   { to: "/combined", label: "Combined P&L", icon: Scale },
 ] as const;
 
-const SYS = [
-  { to: "/broker", label: `Broker / ${brokerInfo().short}`, icon: Plug },
-  { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+// Which broker this row names has to be read at RENDER time, not here.
+//
+// It used to be interpolated into this module-level array, so brokerInfo() ran
+// exactly once — when the module was first imported — and the label was frozen
+// for the life of the page. Switch desks from the header and the sidebar went on
+// naming the old one. That is not a cosmetic slip: it sent someone to spend a
+// morning trying to authorise E*TRADE on a page that was showing them IBKR's
+// gateway, because the only label they could see said E*TRADE.
+//
+// Everything else that reads the active broker already does so inside a
+// component body or a function call, so it re-reads on every render. This was
+// the one place that did not.
+const sysNav = (brokerShort: string) =>
+  [
+    { to: "/broker", label: `Broker / ${brokerShort}`, icon: Plug },
+    { to: "/settings", label: "Settings", icon: Settings },
+  ] as const;
 
 const COLLAPSE_KEY = "nova_sidebar_collapsed";
 const PEEK_HIDE_MS = 600;   // hide this long after the pointer leaves
@@ -89,6 +102,12 @@ function SidebarBody({ onNavigate, onCollapse, collapseIcon }: {
   onCollapse?: () => void;
   collapseIcon?: "close" | "x";
 }) {
+  // Follow a switch made from the header, or in another tab, so the row below
+  // always names the desk the rest of the app is actually talking to.
+  const [brokerShort, setBrokerShort] = useState(() => brokerInfo().short);
+  useEffect(() => onBrokerChange(() => setBrokerShort(brokerInfo().short)), []);
+  const SYS = sysNav(brokerShort);
+
   return (
     <>
       <div className="flex items-center gap-2.5 px-5 h-14 hairline-b shrink-0">
