@@ -8,19 +8,45 @@
 // It also states the thing a trader must not be surprised by: the token dies at MIDNIGHT ET,
 // every day, and no amount of server-side keepalive can extend it.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { startAuth, completeAuth, type AuthStatus } from "@/lib/api/etrade";
+
+// E*TRADE's request token — the one in the authorise link — is good for about
+// five minutes and no longer. Past that the page answers "Due to a logon delay
+// or other issue, your authentication could not be completed", which says
+// nothing about a clock and sends people hunting for a broken integration.
+//
+// The link used to sit on this panel indefinitely, so a tab left open while
+// something else got done, or a second Broker tab that quietly replaced the
+// first one's token, meant clicking a link that was already dead. Hold it for
+// as long as it is actually worth something and say plainly when it is not.
+const LINK_TTL_MS = 5 * 60_000;
 
 export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
   const qc = useQueryClient();
   const [authorizeUrl, setAuthorizeUrl] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [verifier, setVerifier] = useState("");
   const [busy, setBusy] = useState(false);
 
   const expired = status?.state === "EXPIRED";
+
+  // Only tick while a link is live, so the panel costs nothing the rest of the day.
+  useEffect(() => {
+    if (startedAt === null) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+
+  const msLeft = startedAt === null ? 0 : LINK_TTL_MS - (now - startedAt);
+  const linkDead = startedAt !== null && msLeft <= 0;
+  const countdown = `${Math.floor(Math.max(0, msLeft) / 60000)}:${String(
+    Math.floor((Math.max(0, msLeft) % 60000) / 1000),
+  ).padStart(2, "0")}`;
 
   const begin = async () => {
     if (busy) return;
@@ -28,6 +54,9 @@ export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
     try {
       const { authorizeUrl: url } = await startAuth();
       setAuthorizeUrl(url);
+      setStartedAt(Date.now());
+      setNow(Date.now());
+      setVerifier("");
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not reach E*TRADE", { duration: 20000 });
@@ -44,6 +73,7 @@ export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
       await completeAuth(verifier);
       setVerifier("");
       setAuthorizeUrl(null);
+      setStartedAt(null);
       toast.success("E*TRADE connected");
       qc.invalidateQueries();
     } catch (err) {
@@ -74,18 +104,35 @@ export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
         className="mt-2.5 w-full h-10 rounded-lg bg-primary/15 text-primary text-xs font-semibold hover:bg-primary/25 transition inline-flex items-center justify-center gap-2 disabled:opacity-50"
       >
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-        1 — Authorise on E*TRADE
+        {linkDead ? "1 — Start again on E*TRADE" : "1 — Authorise on E*TRADE"}
       </button>
 
-      {authorizeUrl && (
-        <a
-          href={authorizeUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1.5 block text-center text-[10px] text-muted-foreground underline"
-        >
-          Page didn't open? Open the E*TRADE authorisation page
-        </a>
+      {authorizeUrl && !linkDead && (
+        <>
+          <a
+            href={authorizeUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1.5 block text-center text-[10px] text-muted-foreground underline"
+          >
+            Page didn't open? Open the E*TRADE authorisation page
+          </a>
+          <div className="mt-1 text-center text-[10px] text-muted-foreground">
+            This link is good for <span className="num font-semibold">{countdown}</span> — finish
+            before it runs out.
+          </div>
+        </>
+      )}
+
+      {linkDead && (
+        <div className="mt-2 rounded-md bg-warn/10 text-warn text-[11px] leading-relaxed px-2.5 py-2 flex items-start gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+          <span>
+            That E*TRADE page has expired — their link only lasts five minutes, and a code from it
+            will no longer be accepted. Press the button above for a fresh one and finish straight
+            away. Only one of these can be open at a time, so close any other Broker tab first.
+          </span>
+        </div>
       )}
 
       <form onSubmit={finish} className="mt-2.5 flex gap-2">
@@ -100,7 +147,7 @@ export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
         />
         <button
           type="submit"
-          disabled={busy || !verifier.trim() || !authorizeUrl}
+          disabled={busy || !verifier.trim() || !authorizeUrl || linkDead}
           className="h-9 px-4 rounded-lg bg-bull/15 text-bull text-xs font-semibold hover:bg-bull/25 transition disabled:opacity-40"
         >
           Connect
