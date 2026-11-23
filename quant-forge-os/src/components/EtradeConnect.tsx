@@ -98,6 +98,31 @@ export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
         Your E*TRADE password is never entered here and never stored.
       </div>
 
+      {/* Step 0 is the one that was missing, and its absence is what produced
+          "Due to a logon delay or other issue, your authentication could not be
+          completed at this time." E*TRADE's approval page is now a stub that
+          bounces to their MFA login at /etx/pxy/login and comes back carrying
+          the token minted BEFORE the detour. The token is good for about five
+          minutes, and typing a password and waiting on a one-time code spends
+          most of that — so the approval that returns is holding a dead token,
+          and E*TRADE says so in those words: a logon delay.
+          Already signed in, and the detour returns instantly. */}
+      <a
+        href="https://us.etrade.com/etx/pxy/login"
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2.5 w-full h-10 rounded-lg hairline bg-surface-2 text-xs font-semibold hover:bg-surface-1 transition inline-flex items-center justify-center gap-2"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        0 — Sign in to E*TRADE first
+      </a>
+      <div className="mt-1 text-[10px] text-muted-foreground leading-relaxed">
+        Do this one before pressing 1, even if it looks unnecessary. E*TRADE sends the approval
+        page through their login, and the five-minute approval link is already ticking while you
+        type a password and wait for a code — which is the "logon delay" their error means. Signed
+        in already, and step 1 takes seconds.
+      </div>
+
       <button
         onClick={begin}
         disabled={busy}
@@ -128,9 +153,11 @@ export function EtradeConnect({ status }: { status?: AuthStatus | null }) {
         <div className="mt-2 rounded-md bg-warn/10 text-warn text-[11px] leading-relaxed px-2.5 py-2 flex items-start gap-1.5">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
           <span>
-            That E*TRADE page has expired — their link only lasts five minutes, and a code from it
-            will no longer be accepted. Press the button above for a fresh one and finish straight
-            away. Only one of these can be open at a time, so close any other Broker tab first.
+            That E*TRADE page has expired — their link only lasts five minutes. If you were signing
+            in to E*TRADE during those minutes, that is exactly where they went, and their page
+            will say so: <em>"due to a logon delay … your authentication could not be completed"</em>.
+            Sign in with step 0 first, then press 1 and finish straight away. Only one of these can
+            be open at a time, so close any other Broker tab as well.
           </span>
         </div>
       )}
