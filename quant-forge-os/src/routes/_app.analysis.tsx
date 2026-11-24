@@ -37,8 +37,22 @@ function Analysis() {
     refetchInterval: 30_000,
   });
 
-  const { symbols, daily, wins, losses, byDayKey } = computeRealized(trades);
+  const { symbols, daily, wins, losses, byDayKey, leftovers } = computeRealized(trades);
   const realizedTotal = symbols.reduce((a, s) => a + s.realized, 0);
+
+  // Does the fill history actually account for the position we are holding?
+  //
+  // These figures come from walking the fills in order and carrying the running
+  // position. If the history does not reach back far enough, the walk starts
+  // mid-position — a cover with no short in front of it reads as opening a long
+  // — and every number after it is wrong, confidently and silently. The honest
+  // check is cheap: where the walk ends up must match what the broker says is
+  // open. It did not on 24 Nov, when four fills past E*TRADE's 100-order page
+  // invented $983 of loss and showed a +$803 day as -$180.
+  const held = new Map(positions.map((p) => [p.symbol, p.quantity]));
+  const mismatched = [...new Set([...leftovers.keys(), ...held.keys()])].filter(
+    (sym) => Math.round((leftovers.get(sym) ?? 0) - (held.get(sym) ?? 0)) !== 0,
+  );
   const commissions = trades.reduce((a, t) => a + Math.abs(t.commission || 0), 0);
   const unrealized = positions.reduce((a, p) => a + (p.pnl || 0), 0);
   const trips = wins + losses;
@@ -66,6 +80,22 @@ function Analysis() {
 
   return (
     <div className="p-6 space-y-5">
+      {mismatched.length > 0 && (
+        <div className="rounded-2xl p-4 bg-warn/10 border border-warn/30 flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 text-warn shrink-0 mt-0.5" />
+          <div className="text-[11.5px] leading-snug">
+            <span className="font-semibold">These figures are not reliable right now.</span>{" "}
+            <span className="text-muted-foreground">
+              Walking the fills for{" "}
+              <span className="font-semibold text-foreground">{mismatched.join(", ")}</span> ends on a
+              position {brokerInfo().short} does not report holding, which means the history here
+              does not reach back to where those positions were opened. Without the opening fills
+              there is no cost basis, so the realized numbers for those symbols are wrong rather
+              than merely incomplete. Everything else on this page is unaffected.
+            </span>
+          </div>
+        </div>
+      )}
       <div>
         <h1 className="text-xl font-semibold flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-info" /> P&L Analysis

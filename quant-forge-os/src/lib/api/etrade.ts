@@ -524,7 +524,15 @@ function mapStatus(s: string): OrderStatus {
 }
 
 export async function getOrders() {
-  const raw = await api<any[]>(`/api/accounts/${requireAccount()}/orders?count=100`);
+  // Ask for the whole book, not the newest hundred. The proxy pages for us.
+  //
+  // P&L here is reconstructed by walking fills in order and carrying the
+  // running position, so the OLDEST fills are the ones that must not go
+  // missing: a cover with no short in front of it reads as opening a long.
+  // At 104 orders this account lost the four that opened an NVDA short, and
+  // every later NVDA fill was matched against a long 200 that never existed —
+  // $983 of invented loss, a +$803 day shown as -$180.
+  const raw = await api<any[]>(`/api/accounts/${requireAccount()}/orders?count=1000`);
   return (raw ?? []).map((o) => {
     const sym = String(o.symbol ?? "").toUpperCase();
     const isOption = o.securityType === "OPTN";

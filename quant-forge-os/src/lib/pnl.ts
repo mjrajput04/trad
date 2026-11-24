@@ -22,6 +22,13 @@ export interface SymbolPnl {
   trips: number;
   wins: number;
   losses: number;
+  /**
+   * Signed quantity still open at the end of the walk. It should equal the
+   * position the broker actually reports; where it does not, fills are missing
+   * from the front of the history and every figure for that symbol is wrong.
+   * See `leftovers` on the result.
+   */
+  leftover: number;
 }
 
 export interface Realized {
@@ -31,6 +38,19 @@ export interface Realized {
   losses: number;
   byDayKey: Map<string, number>;
   total: number;
+  /**
+   * Where the walk thinks each symbol ended up, including symbols that closed
+   * flat and so carry no trips. Compare it against the broker's own positions:
+   * a disagreement means the fill history given to this function did not reach
+   * back far enough, and the realized figures are not to be trusted.
+   *
+   * This is not hypothetical. E*TRADE's order endpoint caps a page at 100, and
+   * once an account passed 104 orders the four oldest dropped off — the four
+   * that opened an NVDA short. Every later NVDA fill was then matched against a
+   * long 200 that had never existed, inventing $983 of loss and showing a
+   * +$803 day as -$180. Nothing on screen suggested the number was unsafe.
+   */
+  leftovers: Map<string, number>;
 }
 
 /**
@@ -48,6 +68,7 @@ export function computeRealized(trades: Trade[]): Realized {
   }
 
   const symbols: SymbolPnl[] = [];
+  const leftovers = new Map<string, number>();
   const byDay = new Map<string, { t: number; pnl: number }>();
   let wins = 0;
   let losses = 0;
@@ -74,7 +95,7 @@ export function computeRealized(trades: Trade[]): Realized {
     // qty is signed: + long, - short. avg is the cost of whatever is open.
     let qty = 0;
     let avg = 0;
-    const s: SymbolPnl = { symbol, realized: 0, qtyClosed: 0, trips: 0, wins: 0, losses: 0 };
+    const s: SymbolPnl = { symbol, realized: 0, qtyClosed: 0, trips: 0, wins: 0, losses: 0, leftover: 0 };
 
     for (const f of fills) {
       const dir = f.side === "BUY" ? 1 : -1;
@@ -121,6 +142,10 @@ export function computeRealized(trades: Trade[]): Realized {
         byDay.set(k, cur);
       }
     }
+    // Every symbol, not just the ones with trips: a symbol that only ever
+    // opened still has to agree with the broker.
+    s.leftover = qty;
+    leftovers.set(symbol, qty);
     if (s.trips > 0) symbols.push(s);
   }
 
@@ -137,6 +162,7 @@ export function computeRealized(trades: Trade[]): Realized {
     wins,
     losses,
     byDayKey,
+    leftovers,
     total: symbols.reduce((a, s) => a + s.realized, 0),
   };
 }
