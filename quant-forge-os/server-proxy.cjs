@@ -409,7 +409,33 @@ const KEEPALIVE_COMPETE = process.env.KEEPALIVE_COMPETE === '1';
 async function establishBridge(reason) {
   console.log(`[keepalive] ${reason} — attaching to the brokerage session (compete=${KEEPALIVE_COMPETE})`);
   await gw('/iserver/reauthenticate').catch(() => {});
-  await gw('/iserver/auth/ssodh/init', JSON.stringify({ publish: true, compete: KEEPALIVE_COMPETE })).catch(() => {});
+
+  // OMIT compete rather than sending it false.
+  //
+  // Sending `compete: false` is not the same as not asking to compete: this
+  // gateway build answers it with "Force compete capability must be used
+  // together with compete flag" and establishes nothing. The brokerage session
+  // then never comes up, however cleanly the human logged in — sso/validate
+  // returning RESULT:true with a live token while auth/status sat at
+  // authenticated:false for days, repeating that sentence every cycle.
+  //
+  // Not sending the field asks to attach to whatever session exists, which is
+  // the whole intent: publish, do not take. KEEPALIVE_COMPETE=1 still restores
+  // competing for the case where a known-dead session really is holding the
+  // slot — see the note above for why that is not the default.
+  const body = KEEPALIVE_COMPETE ? { publish: true, compete: true } : { publish: true };
+  const init = await gw('/iserver/auth/ssodh/init', JSON.stringify(body)).catch((e) => ({ err: e }));
+
+  // And say what came back. This was `.catch(() => {})`, which swallowed the
+  // result AND the error, so a gateway refusing every single call left no
+  // trace in our own logs — the reason had to be dug out of auth/status by
+  // hand, long after it started costing trading days.
+  const said = init && init.json;
+  if (said && (said.error || said.message)) {
+    console.log(`[keepalive] ssodh/init refused: ${said.error || said.message}`);
+  } else if (init && init.err) {
+    console.log(`[keepalive] ssodh/init failed: ${init.err.message || init.err}`);
+  }
   // Prime accounts + warm the market-data farm so real-time prices flow again
   // (a re-auth alone leaves /accounts 400 and snapshots empty for a moment).
   await fetch(`${GW}/iserver/accounts`).catch(() => {});
