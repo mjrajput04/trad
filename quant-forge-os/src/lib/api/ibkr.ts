@@ -799,6 +799,60 @@ export async function closePosition(conid: number, quantity: number) {
   return result;
 }
 
+/**
+ * Where a trailing stop would first sit, and whether that locks in a profit.
+ *
+ * A trailing stop set too wide on a small gain puts its first stop BELOW the
+ * entry, so the thing sold as protecting profit would bank a loss instead.
+ * Worth knowing before the order goes in, not after it fills.
+ */
+export function trailPreview(entry: number, last: number, quantity: number, trailPct: number) {
+  const long = quantity > 0;
+  const stop = long ? last * (1 - trailPct / 100) : last * (1 + trailPct / 100);
+  const locked = (long ? stop - entry : entry - stop) * Math.abs(quantity);
+  // The widest trail whose first stop still sits at breakeven. Negative when
+  // the position is under water, where no trail can lock anything in.
+  const maxSafePct = last > 0 ? ((long ? last - entry : entry - last) / last) * 100 : 0;
+  return { stop, locked, locksProfit: locked > 0, maxSafePct };
+}
+
+/**
+ * Put a broker-held trailing stop on a position that is already open.
+ *
+ * Until now a trailing stop could only be attached at entry, as a bracket
+ * child. Anything already running could be closed by hand and nothing else, so
+ * a position that moved into profit had no way to keep it.
+ *
+ * TRAIL by percent, GTC, on the closing side. Broker-held matters: IBKR tracks
+ * the high-water mark itself, so it survives this server, this browser and the
+ * night, which a watcher of ours would not.
+ */
+export async function protectPosition(conid: number, quantity: number, trailPct: number) {
+  if (!quantity) throw new Error("Nothing to protect");
+  if (!(trailPct > 0)) throw new Error("Trail percent must be greater than zero");
+  if (!isRuntimeTradingAllowed()) throw new Error(TRADING_DISABLED_MESSAGE);
+  if (!CURRENT_ACCOUNT) {
+    throw new Error("IBKR account not detected yet — log in to the gateway, then retry.");
+  }
+  // One protective order per position: a leftover stop beside this one would be
+  // a second live exit for the same holding.
+  await cancelWorkingOrders({ conid }).catch(() => {});
+  const result = await submitOrders([
+    {
+      acctId: CURRENT_ACCOUNT,
+      conid,
+      orderType: "TRAIL",
+      side: quantity > 0 ? "SELL" : "BUY",
+      quantity: Math.abs(quantity),
+      trailingAmt: trailPct,
+      trailingType: "%",
+      tif: "GTC",
+    },
+  ]);
+  invalidatePositionsCache();
+  return result;
+}
+
 export interface Trade {
   executionId: string;
   symbol: string;

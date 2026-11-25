@@ -805,6 +805,90 @@ export async function closePosition(conid: number, quantity: number) {
   return { orderId: String(out.orderId), status: out.verified ? "Submitted" : "Unverified" };
 }
 
+/**
+ * Where a trailing stop would first sit, and whether that locks in a profit.
+ *
+ * A trailing stop set too wide on a small gain puts its first stop BELOW the
+ * entry, so the thing sold as protecting profit would bank a loss instead.
+ * Worth knowing before the order goes in, not after it fills.
+ */
+export function trailPreview(entry: number, last: number, quantity: number, trailPct: number) {
+  const long = quantity > 0;
+  const stop = long ? last * (1 - trailPct / 100) : last * (1 + trailPct / 100);
+  const locked = (long ? stop - entry : entry - stop) * Math.abs(quantity);
+  // The widest trail whose first stop still sits at breakeven. Negative when
+  // the position is under water, where no trail can lock anything in.
+  const maxSafePct = last > 0 ? ((long ? last - entry : entry - last) / last) * 100 : 0;
+  return { stop, locked, locksProfit: locked > 0, maxSafePct };
+}
+
+/**
+ * Put a broker-held trailing stop on a position that is already open.
+ *
+ * Until now a trailing stop could only be attached at entry, as part of a
+ * bracket. Anything already running could be closed by hand and nothing else,
+ * so a position that moved into profit had no way to keep it.
+ *
+ * Broker-held, GOOD_UNTIL_CANCEL, on the closing side, for whatever the
+ * account actually holds. Broker-held matters: it survives this server, this
+ * browser and the night, which a watcher of ours would not.
+ */
+export async function protectPosition(conid: number, quantity: number, trailPct: number) {
+  if (!quantity) throw new Error("Nothing to protect");
+  if (!(trailPct > 0)) throw new Error("Trail percent must be greater than zero");
+  if (!isRuntimeTradingAllowed()) throw new Error(TRADING_DISABLED_MESSAGE);
+  const account = requireAccount();
+  const ref = refFor(conid);
+  if (!ref) throw new Error("Unknown contract — refresh positions and retry");
+  const isOption = ref.kind === "OPT";
+  const name = isOption ? ref.underlying : ref.symbol;
+
+  // One protective order per position. Leaving an older stop in place would
+  // mean two live exits for one holding, and whichever fired second would open
+  // the opposite position.
+  await cancelWorkingOrders({ conid }).catch(() => {});
+
+  // Size and side from what is actually held, for the same reason closePosition
+  // does it: the row on screen can be a minute old.
+  const live = await heldQuantity(null, conid);
+  if (live === 0) throw new Error(`${name} is already flat — there is nothing to protect.`);
+  const signed = live ?? quantity;
+
+  const spec: Record<string, unknown> = {
+    symbol: name,
+    securityType: isOption ? "OPTN" : "EQ",
+    quantity: Math.min(Math.abs(quantity), Math.abs(signed)),
+    priceType: "TRAILING_STOP_PRCT",
+    trailingAmount: trailPct,
+    orderTerm: "GOOD_UNTIL_CANCEL",
+    marketSession: "REGULAR",
+    action: isOption
+      ? signed > 0
+        ? "SELL_CLOSE"
+        : "BUY_CLOSE"
+      : signed > 0
+        ? "SELL"
+        : "BUY_TO_COVER",
+  };
+  if (isOption) {
+    Object.assign(spec, {
+      underlying: ref.underlying,
+      callPut: ref.right === "P" ? "PUT" : "CALL",
+      expiryYear: ref.year,
+      expiryMonth: ref.month,
+      expiryDay: ref.day,
+      strikePrice: ref.strike,
+    });
+  }
+
+  const out = await api<any>(`/api/accounts/${account}/orders/submit`, {
+    method: "POST",
+    body: JSON.stringify(spec),
+  });
+  if (!out.orderId) throw new Error(out.warning || "Trailing stop was not accepted");
+  return { orderId: String(out.orderId), status: out.verified ? "Submitted" : "Unverified" };
+}
+
 export interface Trade {
   executionId: string;
   symbol: string;

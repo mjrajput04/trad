@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Delta } from "@/components/Delta";
 import { fmtMoney } from "@/lib/market-data";
-import { getPositions, closePosition, type Position } from "@/lib/api/broker";
-import { AlertTriangle, Loader2, X, Lock } from "lucide-react";
+import { getPositions, closePosition, protectPosition, type Position } from "@/lib/api/broker";
+import { AlertTriangle, Loader2, X, Lock, Shield } from "lucide-react";
+import { useState } from "react";
+import { TrailStopModal } from "@/components/TrailStopModal";
 import { useAuth } from "@/lib/auth-context";
 import { TRADING_DISABLED_MESSAGE, useTradingAllowed } from "@/lib/app-flags";
 import { toast } from "sonner";
@@ -19,6 +21,7 @@ function Positions() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const tradingOff = !useTradingAllowed(user?.email).allowed;
+  const [trailing, setTrailing] = useState<Position | null>(null);
 
   const { data: positions = [], isLoading, isError, error } = useQuery({
     queryKey: [activeBroker(), "ibkr-positions"],
@@ -35,6 +38,23 @@ function Positions() {
       qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-summary"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Close failed"),
+  });
+
+  // Protecting a position is not closing one, so it gets its own action and
+  // its own confirmation: the number that matters is where the stop first
+  // sits, and that belongs on screen before the order goes, not in a toast
+  // afterwards. TrailStopModal works it out.
+  const protect = useMutation({
+    mutationFn: ({ p, pct }: { p: Position; pct: number }) =>
+      protectPosition(p.conid, p.quantity, pct),
+    onSuccess: (result: any) => {
+      toast.success(`Trailing stop placed at ${brokerInfo().short} — #${result?.orderId ?? "sent"}`);
+      setTrailing(null);
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-positions"] });
+      qc.invalidateQueries({ queryKey: [activeBroker(), "ibkr-orders"] });
+    },
+    onError: (e: any) =>
+      toast.error(e?.message ?? "Could not place the trailing stop", { duration: 15000 }),
   });
 
   const confirmClose = (p: Position) => {
@@ -105,6 +125,11 @@ function Positions() {
                   <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.side === "LONG" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{r.side}</span>
                 </div>
                 <div className="col-span-1 flex justify-end">
+                  <button onClick={tradingOff ? undefined : () => setTrailing(r)} disabled={protect.isPending || tradingOff}
+                    title={tradingOff ? TRADING_DISABLED_MESSAGE : "Protect with a trailing stop"}
+                    className="h-7 w-7 mr-1.5 rounded-md hairline bg-surface-2 hover:bg-primary/20 grid place-items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+                    <Shield className="h-3.5 w-3.5 text-primary" />
+                  </button>
                   <button onClick={tradingOff ? undefined : () => confirmClose(r)} disabled={close.isPending || tradingOff}
                     title={tradingOff ? TRADING_DISABLED_MESSAGE : `Close position (${r.quantity > 0 ? "SELL" : "BUY"} ${Math.abs(r.quantity)} @ MKT)`}
                     className="h-7 w-7 rounded-md hairline bg-surface-2 hover:bg-bear/20 grid place-items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
@@ -117,6 +142,15 @@ function Positions() {
           </div>
           </div>
         </div>
+      )}
+
+      {trailing && (
+        <TrailStopModal
+          position={trailing}
+          busy={protect.isPending}
+          onConfirm={(pct) => protect.mutate({ p: trailing, pct })}
+          onClose={() => setTrailing(null)}
+        />
       )}
     </div>
   );

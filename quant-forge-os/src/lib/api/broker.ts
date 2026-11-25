@@ -93,6 +93,11 @@ export const placeOrder = (...a: Parameters<BrokerApi["placeOrder"]>) => impl().
 export const cancelOrder = (...a: Parameters<BrokerApi["cancelOrder"]>) => impl().cancelOrder(...a);
 export const cancelWorkingOrders = (...a: Parameters<BrokerApi["cancelWorkingOrders"]>) => impl().cancelWorkingOrders(...a);
 export const closePosition = (...a: Parameters<BrokerApi["closePosition"]>) => impl().closePosition(...a);
+export const protectPosition = (...a: Parameters<BrokerApi["protectPosition"]>) =>
+  impl().protectPosition(...a);
+// Pure arithmetic over numbers already on screen — same answer either side, so
+// it needs no broker behind it.
+export const trailPreview = ibkr.trailPreview;
 export const verifyOrderLive = (...a: Parameters<BrokerApi["verifyOrderLive"]>) => impl().verifyOrderLive(...a);
 
 /* ------------------------------------------------- E*TRADE OAuth only */
