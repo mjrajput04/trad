@@ -587,6 +587,14 @@ export async function getOrders() {
     rawStatus: o.status,
     tif: (o.timeInForce ?? o.tif ?? "") as string,
     avgPrice: parseIBKRNum(o.avgPrice),
+    // The same three fields E*TRADE's layer carries, so one Orders page can
+    // read both desks. IBKR does not label a sale as opening or closing — it
+    // works that out from the position — so action mirrors side here rather
+    // than inventing a distinction the broker never made.
+    action: o.side === "B" || o.side === "BUY" ? "BUY" : "SELL",
+    session: o.outsideRth ? "EXTENDED" : "REGULAR",
+    // Commission arrives with the execution, not the order.
+    fees: 0,
     timeMs: Number(o.lastExecutionTime_r) || 0,
     time: new Date(o.lastExecutionTime_r ?? Date.now()).toLocaleTimeString(
       "en-US",

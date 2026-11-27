@@ -404,7 +404,10 @@ export async function getAccountSummary() {
     // Report 0 rather than inventing a number — the UI shows these as plain figures.
     initMarginReq: 0,
     maintMarginReq: 0,
-    excessLiquidity: num(b.cash),
+    // What can actually leave the account. This read cash, which on a margin
+    // account is the larger number — 48,946.24 against the 46,946.24 E*TRADE
+    // says is available, a $2,000 overstatement of free money.
+    excessLiquidity: num(b.raw?.Computed?.cashAvailableForWithdrawal ?? b.cash),
     totalCash: num(b.cash),
     unrealizedPnl: num(b.totalUnrealizedGain),
     realizedPnl: 0,
@@ -552,6 +555,16 @@ export async function getOrders() {
         : stockId(sym),
       symbol: sym,
       side: /^(BUY|BUY_TO_COVER|BUY_OPEN|BUY_CLOSE)$/.test(String(o.action)) ? "BUY" : "SELL",
+      // BUY/SELL cannot say whether a sale opened a short or closed a long, and
+      // 55 of this account's 125 orders are SELL_SHORT or BUY_TO_COVER. Collapsed
+      // to SELL, 32 short ENTRIES were rendered as bullish exits. Carry what
+      // E*TRADE actually said so the screen can be honest about direction.
+      action: String(o.action ?? ""),
+      // Regular or extended session. 106 of 125 orders here were extended-hours
+      // and nothing on the page distinguished them, which is the very thing that
+      // went wrong when one was refused.
+      session: String(o.marketSession ?? ""),
+      fees: num(o.estimatedFees) || num(o.estimatedCommission),
       type: String(o.priceType ?? ""),
       quantity: num(o.quantity),
       filled: num(o.filledQuantity),
@@ -925,36 +938,6 @@ function derivedFee(quantity: number, price: number, netAmount: number): number 
   return Math.round(fee * 100) / 100;
 }
 
-const feeKey = (symbol: string, side: string, quantity: number, price: number): string =>
-  `${symbol.toUpperCase()}|${side}|${quantity}|${price.toFixed(4)}`;
-
-/**
- * Regulatory fees per execution, read out of the cash each transaction moved.
- *
- * The order book does not carry them, and this feed is not stable enough to
- * build a P&L on, but a fee that has posted is a fact and worth keeping.
- * Anything that has not posted yet reads as zero, which costs a few cents of
- * accuracy on a cost column and never moves the P&L around.
- */
-async function transactionFees(days: number): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  const raw = await api<any[]>(
-    `/api/accounts/${requireAccount()}/transactions?days=${Math.max(days, 10)}`,
-  );
-  for (const t of raw ?? []) {
-    const symbol = String(t.symbol ?? "").toUpperCase();
-    const quantity = Math.abs(num(t.quantity));
-    if (!symbol || !quantity) continue; // cash, journals, adjustments — not trades
-    const price = num(t.price);
-    const side = num(t.quantity) >= 0 ? "BUY" : "SELL";
-    // Options carry a real per-contract commission and E*TRADE reports that one
-    // properly; for stocks the only cost is the fee inside netAmount.
-    const fee = num(t.commission) || derivedFee(quantity, price, num(t.netAmount));
-    if (fee > 0) out.set(feeKey(symbol, side, quantity, price), fee);
-  }
-  return out;
-}
-
 /**
  * Executed trades.
  *
@@ -974,10 +957,7 @@ async function transactionFees(days: number): Promise<Map<string, number>> {
  * difference being exactly the $7.25 of regulatory fees on $345k of sales.
  */
 export async function getTrades(days = 6): Promise<Trade[]> {
-  const [orders, fees] = await Promise.all([
-    getOrders(),
-    transactionFees(days).catch(() => new Map<string, number>()),
-  ]);
+  const orders = await getOrders();
   const cutoff = Date.now() - days * 86_400_000;
 
   return orders
@@ -993,7 +973,14 @@ export async function getTrades(days = 6): Promise<Trade[]> {
       quantity: o.filled,
       price: o.avgPrice,
       time: o.timeMs,
-      commission: fees.get(feeKey(o.symbol, o.side, o.filled, o.avgPrice)) ?? 0,
+      // The fill's own cost, from the order book, not matched in from the
+      // transactions feed. That feed is capped at fifty rows and rewrites
+      // itself intraday, so the overlay matched 16 of 67 fills and the cost
+      // column read $14.09 against $28.05 of fees the cash actually paid.
+      // E*TRADE charges no commission on US stocks — this is the sell-side
+      // regulatory fee — and summed across the whole history it comes to
+      // $28.01, four cents off what the account lost to it.
+      commission: o.fees,
       netAmount: o.avgPrice * o.filled,
       orderRef: String(o.orderId),
     }))

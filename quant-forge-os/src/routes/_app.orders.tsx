@@ -17,11 +17,22 @@ const TABS = ["Working", "Filled", "Canceled", "Rejected"] as const;
 
 // What an order actually IS in plain terms: a SELL stop protects a long (stop
 // loss), a SELL limit books profit (take profit), TRAIL = trailing stop, etc.
-function orderRole(o: { type?: string; side?: string }): { label: string; cls: string } | null {
+// What the order is FOR, which is not the same as which way it points.
+//
+// This used to call any sell limit a take-profit. A SELL_SHORT limit is an
+// entry — the opening of a bearish position — and 32 of this account's orders
+// were painted bull-green "TAKE PROFIT" for the crime of being sales. Only a
+// sale that closes a long, or a cover that closes a short, can be taking a
+// profit, and E*TRADE says which is which in the action.
+function orderRole(o: { type?: string; side?: string; action?: string }): { label: string; cls: string } | null {
   const t = (o.type ?? "").toUpperCase();
+  const a = (o.action ?? "").toUpperCase();
   if (t.includes("TRAIL")) return { label: "TRAILING SL", cls: "text-bear" };
   if (t.includes("STOP") || t === "STP") return { label: "STOP LOSS", cls: "text-bear" };
-  if ((t.includes("LIMIT") || t === "LMT") && o.side === "SELL") return { label: "TAKE PROFIT", cls: "text-bull" };
+  if (a === "SELL_SHORT" || a === "SELL_OPEN") return { label: "SHORT ENTRY", cls: "text-bear" };
+  if (a === "BUY_TO_COVER" || a === "BUY_CLOSE") return { label: "COVER", cls: "text-bull" };
+  const closingLong = a === "SELL" || a === "SELL_CLOSE" || (!a && o.side === "SELL");
+  if ((t.includes("LIMIT") || t === "LMT") && closingLong) return { label: "TAKE PROFIT", cls: "text-bull" };
   return null;
 }
 
@@ -90,7 +101,18 @@ function Orders() {
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${o.side === "BUY" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear"}`}>{o.side}</span>
               </div>
               <div className="col-span-1">
-                <div className="text-xs text-muted-foreground">{o.type}</div>
+                <div className="text-xs text-muted-foreground">
+                  {o.type}
+                  {/* 106 of this account's 125 orders were extended-hours and
+                      nothing said so — which matters, because the session is
+                      exactly what gets an order refused out of hours. */}
+                  {o.session === "EXTENDED" && (
+                    <span className="ml-1 text-[9px] text-warn">EXT</span>
+                  )}
+                  {o.tif === "GOOD_UNTIL_CANCEL" && (
+                    <span className="ml-1 text-[9px] text-muted-foreground">GTC</span>
+                  )}
+                </div>
                 {(() => { const r = orderRole(o); return r ? <div className={`text-[9px] font-bold tracking-wide ${r.cls}`}>{r.label}</div> : null; })()}
               </div>
               {/* Ordered is not traded. This column showed o.quantity for every row,
@@ -138,6 +160,18 @@ function Orders() {
                   {tab === "Filled" && <><Check className="h-3 w-3 text-bull" /><span className="text-bull">Filled</span></>}
                   {tab === "Canceled" && <><X className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground">Canceled</span></>}
                   {tab === "Rejected" && <><X className="h-3 w-3 text-bear" /><span className="text-bear">Rejected</span></>}
+                  {/* The cell above is switched on the TAB, and the list is
+                      filtered to that same tab, so it could never say anything
+                      the tab did not. An order that EXPIRED holding 300 traded
+                      shares read simply "Canceled". Where the broker's own word
+                      differs from the bucket it was sorted into, show it. */}
+                  {o.rawStatus && o.rawStatus.toUpperCase() !== tab.toUpperCase() &&
+                    !(tab === "Filled" && o.rawStatus.toUpperCase() === "EXECUTED") &&
+                    !(tab === "Canceled" && o.rawStatus.toUpperCase().startsWith("CANCEL")) && (
+                      <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+                        {o.rawStatus}
+                      </span>
+                    )}
                 </span>
               </div>
               <div className="col-span-1 flex justify-end">
