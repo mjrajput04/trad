@@ -93,9 +93,45 @@ function Orders() {
                 <div className="text-xs text-muted-foreground">{o.type}</div>
                 {(() => { const r = orderRole(o); return r ? <div className={`text-[9px] font-bold tracking-wide ${r.cls}`}>{r.label}</div> : null; })()}
               </div>
-              <div className="col-span-1 text-right num text-sm">{o.quantity}</div>
-              <div className="col-span-2 text-right num text-sm">{o.price > 0 ? `$${fmtMoney(o.price)}` : "MKT"}</div>
-              <div className="col-span-2 text-right num text-sm text-muted-foreground">{o.price > 0 ? `$${fmtMoney(o.price * o.quantity)}` : "—"}</div>
+              {/* Ordered is not traded. This column showed o.quantity for every row,
+                  so a cancelled order for 100 shares read exactly like a hundred shares
+                  that changed hands. Show what filled against what was asked whenever
+                  the two differ, and grey the figure out when nothing filled at all. */}
+              <div className="col-span-1 text-right num text-sm">
+                {o.filled > 0 && o.filled < o.quantity ? (
+                  <span className="text-warn">{o.filled} / {o.quantity}</span>
+                ) : o.filled > 0 ? (
+                  o.filled
+                ) : (
+                  <span className="text-muted-foreground">{o.quantity}</span>
+                )}
+              </div>
+              {/* Price: once an order has filled, the only honest number is what it
+                  filled AT. This showed o.price, which prefers the limit, so eleven
+                  filled orders displayed the price asked rather than the price got.
+
+                  Total: limit x ordered. Across this account that invented $2.2m of
+                  turnover out of 58 orders that filled nothing whatsoever — a page of
+                  cancelled intentions reading as a page of trades. Money only moved
+                  where shares did, so that is the only place a total belongs. */}
+              {(() => {
+                const done = o.filled > 0;
+                const shown = done && o.avgPrice > 0 ? o.avgPrice : o.price;
+                const value = done ? (o.avgPrice > 0 ? o.avgPrice : o.price) * o.filled : 0;
+                return (
+                  <>
+                    <div className="col-span-2 text-right num text-sm">
+                      {shown > 0 ? `${fmtMoney(shown)}` : "MKT"}
+                      {!done && shown > 0 && (
+                        <span className="block text-[9px] text-muted-foreground leading-none">asking</span>
+                      )}
+                    </div>
+                    <div className="col-span-2 text-right num text-sm text-muted-foreground">
+                      {value > 0 ? `${fmtMoney(value)}` : "—"}
+                    </div>
+                  </>
+                );
+              })()}
               <div className="col-span-1">
                 <span className="inline-flex items-center gap-1 text-[11px]">
                   {tab === "Working" && <><Clock className="h-3 w-3 text-warn" /><span className="text-warn">Working</span></>}
