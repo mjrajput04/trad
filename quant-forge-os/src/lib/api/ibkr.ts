@@ -866,8 +866,18 @@ export interface Trade {
 }
 
 /** Executed trades for the last few days (IBKR keeps ~1 week). */
+/**
+ * IBKR's executions endpoint only reaches back about a week, whatever is
+ * asked of it. Clamp here so callers can ask for "everything" without caring
+ * which broker they are talking to, and get this broker's everything.
+ * The archive is what carries IBKR history past that.
+ */
+const IBKR_TRADE_DAYS_MAX = 7;
+
 export async function getTrades(days = 6): Promise<Trade[]> {
-  const data = await ibkr<any[]>(`/iserver/account/trades?days=${days}`);
+  const data = await ibkr<any[]>(
+    `/iserver/account/trades?days=${Math.min(days, IBKR_TRADE_DAYS_MAX)}`,
+  );
   return (data ?? []).map((t) => ({
     executionId: String(t.execution_id ?? t.exec_id ?? ""),
     symbol: t.symbol ?? t.ticker ?? t.contract_description_1 ?? "",

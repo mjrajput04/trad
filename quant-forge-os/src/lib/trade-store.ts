@@ -6,6 +6,21 @@
 import { supabase } from "@/integrations/supabase/client";
 import { activeBroker, type BrokerId } from "./broker";
 import { getTrades, getOrders, type Trade } from "./api/broker";
+
+/**
+ * Ask each broker for everything it has, and let the broker layer clamp to
+ * what its own source can reach — IBKR stops at a week, E*TRADE's order book
+ * goes back to the first trade.
+ *
+ * This used to ask for 7 days flat, on the assumption that the archive held
+ * the rest. Where the archive does not exist, that assumption quietly deletes
+ * history: on 27 Nov the window started at the 23rd, dropping 38 fills from
+ * the 18th, 19th and 20th and reporting +5,762.42 of realized profit against
+ * an actual +8,974.29. Not an error, not a gap on the page — just $3,211.87
+ * less than the truth, with every symbol still closing flat so even the
+ * leftover check had nothing to object to.
+ */
+const FULL_HISTORY_DAYS = 365;
 // The combined view reads BOTH brokers at once, so it cannot go through the
 // facade — that one follows whichever broker is selected. Each module keeps its
 // own account and session, so asking both is safe whichever one is on screen.
@@ -137,7 +152,7 @@ async function getProvisionalFills(real: Trade[]): Promise<Trade[]> {
  * whatever side is reachable so the page still renders.
  */
 export async function getTradesAllTime(): Promise<Trade[]> {
-  const recent = await getTrades(7).catch(() => [] as Trade[]);
+  const recent = await getTrades(FULL_HISTORY_DAYS).catch(() => [] as Trade[]);
   if (recent.length) await syncTrades(recent).catch(() => 0);
   const archived = await getArchivedTrades().catch(() => [] as Trade[]);
   const seen = new Set(archived.map((t) => t.executionId));
@@ -179,7 +194,7 @@ export async function getBrokerHistory(broker: BrokerId): Promise<BrokerHistory>
 
   let recent: Trade[] = [];
   try {
-    recent = await api.getTrades(7);
+    recent = await api.getTrades(FULL_HISTORY_DAYS);
   } catch (e: any) {
     liveOk = false;
     error = e?.message ?? "the broker could not be reached";
